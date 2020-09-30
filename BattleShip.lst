@@ -1,0 +1,1810 @@
+BattleShip                                                                                                              PAGE 1
+                         1     ; ;:-* 8052 BattleShip *-:; ;
+                         2     ; EEE212 - Section 4 - Group 9 ;
+                         3     ;https://www.riyas.org/2013/12/online-led-matrix-font-generator-with.html
+                         4     ;=========================================================
+                         5     ; ;;VARIABLES;; ;
+                         6
+  0004                   7      HITS_TO_WIN     EQU 04 ;Normally all 12 ship tiles need to be hit
+                         8      ;Bits
+  007F                   9      P1_P2 BIT 7FH          ;0 for P1, 1 for P2
+  007E                  10      RADAR BIT 7EH          ;Radar mode indicator when updating LCD pages
+  007D                  11      TEXT  BIT 7DH          ;Set to display text screen
+  007C                  12      FILLER_SHORTCUT BIT 7CH;For FILL_MAP subroutine efficiency
+  007B                  13      SIMUL BIT 7BH          ;SET when simulating model (map loading, etc)
+                        14
+                        15      ;Bytes
+  0030                  16      MAP_NO        EQU 30H ;AKA: MAP_ID, SCREEN_ID, etc. -
+                        17                       ; 1 for P1 Map, 2 for P2 Map, 3 for Text Screen
+  0031                  18      TILE_ROW      EQU 31H
+  0032                  19      TILE_COL      EQU 32H
+  0033                  20      TILE_ID       EQU 33H ;Use R's? ***
+                        21
+  0007                  22      CTR_I         EQU 07H ; Counters
+  0006                  23      CTR_II        EQU 06H
+  0005                  24      CTR_III       EQU 05H
+                        25
+  0004                  26      LCD_COUNTER_1 EQU 04H ; Counters for LCD subroutines
+  0003                  27      LCD_COUNTER_2 EQU 03H
+                        28
+  0034                  29      INPUT_I       EQU 34H
+  0035                  30      INPUT_II      EQU 35H
+                        31
+  0036                  32      P1_SHIPS_LEFT EQU 36H ;Remaining ships tracked here
+  0037                  33      P2_SHIPS_LEFT EQU 37H
+                        34
+                        35      ;RAM Locations
+  0040                  36      P1_MAP_START  EQU 40H
+  007F                  37      P1_MAP_END    EQU 7FH
+                        38
+  0080                  39      P2_MAP_START  EQU 80H
+  00BF                  40      P2_MAP_END    EQU 0BFH
+                        41
+  00C0                  42      TEXT_SCR_MAP_START    EQU 0C0H ; AKA: INFO_SCR
+  00FF                  43      TEXT_SCR_MAP_END      EQU 0FFH
+                        44
+                        45      ;EEPROM
+  00A4                  46      eeprom_scl_pin  EQU P2.4  ;scl p2.4    a4h
+  00A5                  47      eeprom_sda_pin  EQU P2.5  ;sda p2.5    a5h
+  0038                  48      memory_address1 EQU 38H
+  0039                  49      eeprom_data     EQU 39H   ;Input when writing
+  003A                  50      eeprom_page_no  EQU 3AH
+  003B                  51      EEPROM_BUFF     EQU 3BH   ;Output when reading
+                        52
+                        53      ;LCD
+  00B7                  54      RS        EQU P3.7 ;Pin  4    - 1 is for DATA, 0 is for COMMANDS - (RS)
+  00B6                  55      RD_WR     EQU P3.6 ;Pin  5    - 0 is for WRITE
+  00B5                  56      ENABLE    EQU P3.5 ;Pin  6    - SETB to SEND
+  0090                  57      LCD_PORT  EQU P1   ;Pins 7-14 - MSB at 14
+  00B4                  58      CS_1      EQU P3.4 ;Pin  15   - 1 = selected
+  00B3                  59      CS_2      EQU P3.3 ;Pin  16   - 1 = selected
+  00B2                  60      LCD_RESET EQU P3.2 ;Pin  17
+                        61
+                        62     ;=========================================================
+                        63
+                        64     ; ;;PROGRAM;; ;
+                        65
+0000 C27B               66     CLR SIMUL
+                        67     ;SETB SIMUL
+0002 207B08             68     JB SIMUL, MAP_SETUP
+                        69
+                        70     ;Clear All RAM (Set to #0)
+0005 78FF               71      MOV R0,  #255
+                        72      CLEAR_LOOP:
+0007 7600               73      MOV @R0, #0
+0009 D8FC               74      DJNZ R0, CLEAR_LOOP
+                        75
+                        76     ;SETUP Maps
+000B C27F               77      CLR P1_P2
+                        78
+                        79      MAP_SETUP:
+                        80
+000D 307B03             81        JNB SIMUL, SS1
+0010 0200E8             82        LJMP EEPROM_ALT ;In simulation mode, the custom maps are loaded
+                        83        SS1:
+                        84
+                        85        ;;Ask for Map No on Text Screen: PX: Enter Map #
+                        86           ;;;Clear Text Screen
+0013 753003             87      MOV MAP_NO, #3
+0016 753340             88      MOV TILE_ID, #BLANK_TILE
+0019 7135               89      ACALL FILL_MAP
+                        90
+                        91           ;;;Display Message "PX Enter Map No"
+001B 753003             92      MOV MAP_NO, #3
+001E 753101             93      MOV TILE_ROW, #1
+0021 753203             94      MOV TILE_COL, #3
+0024 7107               95      ACALL SELECT_TILE
+0026 7730               96      MOV @R1, #CHAR_P
+0028 09                 97      INC R1
+0029 7701               98      MOV @R1, #CHAR_1
+002B 307F02             99      JNB P1_P2, SKIP1
+002E 7702              100      MOV @R1, #CHAR_2
+                       101      SKIP1:
+0030 753102            102      MOV TILE_ROW, #2
+0033 753202            103      MOV TILE_COL, #2
+0036 7107              104      ACALL SELECT_TILE
+0038 7725              105      MOV @R1, #CHAR_E
+003A 09                106      INC R1
+003B 772E              107      MOV @R1, #CHAR_N
+003D 09                108      INC R1
+003E 7734              109      MOV @R1, #CHAR_T
+0040 09                110      INC R1
+0041 7725              111      MOV @R1, #CHAR_E
+0043 09                112      INC R1
+0044 7732              113      MOV @R1, #CHAR_R
+0046 753103            114      MOV TILE_ROW, #3
+0049 753201            115      MOV TILE_COL, #1
+004C 7107              116      ACALL SELECT_TILE
+004E 772D              117      MOV @R1, #CHAR_M
+0050 09                118      INC R1
+0051 7721              119      MOV @R1, #CHAR_A
+0053 09                120      INC R1
+0054 7730              121      MOV @R1, #CHAR_P
+0056 09                122      INC R1
+0057 770A              123      MOV @R1, #CHAR_SPACE
+0059 09                124      INC R1
+005A 772E              125      MOV @R1, #CHAR_N
+005C 09                126      INC R1
+005D 772F              127      MOV @R1, #CHAR_O
+005F 753105            128      MOV TILE_ROW, #5
+0062 753203            129      MOV TILE_COL, #3
+0065 7107              130      ACALL SELECT_TILE
+0067 770E              131      MOV @R1, #CHAR_UNDERSCORE
+0069 09                132      INC R1
+006A 770E              133      MOV @R1, #CHAR_UNDERSCORE
+                       134
+006C D27D              135      SETB TEXT
+006E 71C1              136      ACALL UPDATE_LCD_ALL
+                       137
+                       138        ;;Receive Map Number
+                       139           ;;;Digit 1
+                       140      ENTER1:
+0070 9117              141      ACALL KEYBOARD
+0072 B44602            142      CJNE A, #'F', SKIP00;F key is used as 0 key
+0075 7430              143      MOV A, #'0'
+                       144      SKIP00:
+0077 C3                145      CLR C
+0078 9430              146      SUBB A, #30H
+007A C3                147      CLR C
+007B B40800            148      CJNE A, #8, $+3
+007E 50F0              149      JNC ENTER1
+0080 F534              150      MOV INPUT_I, A
+                       151
+0082 F533              152      MOV TILE_ID, A  ;TILE ID = Integer value for 0-9
+0084 753105            153      MOV TILE_ROW, #5
+0087 753203            154      MOV TILE_COL, #3;**
+008A 7107              155      ACALL SELECT_TILE
+008C A733              156      MOV @R1, TILE_ID
+                       157      ;ACALL UPDATE_LCD_COL
+008E D27D              158      SETB TEXT
+0090 71C1              159      ACALL UPDATE_LCD_ALL
+                       160
+                       161           ;;;Digit 2
+                       162      ENTER2:
+0092 9117              163      ACALL KEYBOARD
+0094 B44602            164      CJNE A, #'F', SKIP01;F key is used as 0 key
+0097 7430              165      MOV A, #'0'
+                       166      SKIP01:
+0099 C3                167      CLR C
+009A 9430              168      SUBB A, #30H
+009C C3                169      CLR C
+009D B40A00            170      CJNE A, #10, $+3
+00A0 50F0              171      JNC ENTER2
+00A2 F535              172      MOV INPUT_II, A
+                       173
+                       174
+00A4 F533              175      MOV TILE_ID, A  ;TILE ID = Integer value for 0-9
+00A6 753105            176      MOV TILE_ROW, #5
+00A9 753204            177      MOV TILE_COL, #4
+00AC 7107              178      ACALL SELECT_TILE
+00AE A733              179      MOV @R1, TILE_ID
+                       180      ;ACALL UPDATE_LCD_COL
+00B0 D27D              181      SETB TEXT
+00B2 71C1              182      ACALL UPDATE_LCD_ALL
+                       183
+                       184        ;;DELAY 1S
+00B4 7F05              185      MOV R7, #5 ;15 for 1s
+                       186      DELAY1:
+00B6 758901            187      MOV TMOD,#01H
+00B9 758C00            188      MOV TH0, #0
+00BC 758A00            189      MOV TL0, #0
+00BF C28D              190      CLR TF0
+00C1 D28C              191      SETB TR0
+00C3 308DFD            192      JNB TF0, $
+00C6 C28C              193      CLR TR0
+00C8 DFEC              194      DJNZ R7, DELAY1
+                       195
+                       196        ;;Fetch Map
+                       197      ;SJMP EEPROM_ALT ;TO SKIP EEPROM, COMMENT IT***
+                       198
+00CA 750713            199      MOV CTR_I, #19
+00CD 79C0              200      MOV R1, #TEXT_SCR_MAP_START
+                       201
+00CF 85343A            202      MOV EEPROM_PAGE_NO, INPUT_I
+00D2 E535              203      MOV A, INPUT_II
+00D4 75F013            204      MOV B, #19
+00D7 A4                205      MUL AB
+00D8 F538              206      MOV MEMORY_ADDRESS1, A
+                       207
+                       208      READ_LOOP:
+00DA C001              209      PUSH 01
+00DC B114              210      ACALL READ_DATA
+00DE D001              211      POP  01
+00E0 A73B              212      MOV @R1, EEPROM_BUFF
+00E2 09                213      INC R1
+00E3 0538              214      INC MEMORY_ADDRESS1
+00E5 D507F2            215      DJNZ CTR_I, READ_LOOP
+                       216
+                       217        EEPROM_ALT: ;For running the program without the EEPROM, comment this when not using it
+                       218     ;   MOV R1, #TEXT_SCR_MAP_START ;P1 Map (3 vertical, small horz)
+                       219     ;   MOV @R1, #0A8H
+                       220     ;   INC R1
+                       221     ;   MOV @R1, #49H
+                       222     ;   INC R1
+                       223     ;   MOV @R1, #49H
+                       224     ;   INC R1
+                       225     ;
+                       226     ;   MOV @R1, #0ABH
+                       227     ;   INC R1
+                       228     ;   MOV @R1, #4AH
+                       229     ;   INC R1
+                       230     ;   MOV @R1, #4AH
+                       231     ;   INC R1
+                       232     ;   MOV @R1, #46H
+                       233     ;   INC R1
+                       234     ;   MOV @R1, #48H
+                       235     ;   INC R1
+                       236     ;
+                       237     ;   MOV @R1, #0A8H
+                       238     ;   INC R1
+                       239     ;   MOV @R1, #47H
+                       240     ;   INC R1
+                       241     ;   MOV @R1, #4AH
+                       242     ;   INC R1
+                       243     ;
+                       244     ;   MOV @R1, #89H
+                       245     ;   INC R1
+                       246     ;   MOV @R1, #47H
+                       247     ;   INC R1
+                       248     ;   MOV @R1, #49H
+                       249     ;   INC R1
+                       250     ;
+                       251     ;   MOV @R1, #81H
+                       252     ;   INC R1
+                       253     ;   MOV @R1, #4AH
+                       254     ;   INC R1
+                       255     ;
+                       256     ;   MOV @R1, #81H
+                       257     ;   INC R1
+                       258     ;   MOV @R1, #47H
+                       259     ;   INC R1
+                       260     ;
+                       261     ;   MOV @R1, #80H
+                       262     ;
+                       263     ;   JB P1_P2, LOAD_MAP
+                       264     ;
+                       265     ;   MOV R1, #TEXT_SCR_MAP_START ;P2 Map
+                       266     ;   MOV @R1, #80H
+                       267     ;
+                       268     ;   INC R1
+                       269     ;   MOV @R1, #80H
+                       270     ;
+                       271     ;   INC R1
+                       272     ;   MOV @R1, #0B0H
+                       273     ;   INC R1
+                       274     ;   MOV @R1, #46H
+                       275     ;   INC R1
+                       276     ;   MOV @R1, #48H
+                       277     ;
+                       278     ;   INC R1
+                       279     ;   MOV @R1, #8FH
+                       280     ;   INC R1
+                       281     ;   MOV @R1, #46H
+                       282     ;   INC R1
+                       283     ;   MOV @R1, #4BH
+                       284     ;   INC R1
+                       285     ;   MOV @R1, #4BH
+                       286     ;   INC R1
+                       287     ;   MOV @R1, #48H
+                       288     ;
+                       289     ;   INC R1
+                       290     ;   MOV @R1, #0F0H
+                       291     ;   INC R1
+                       292     ;   MOV @R1, #46H
+                       293     ;   INC R1
+                       294     ;   MOV @R1, #4BH
+                       295     ;   INC R1
+                       296     ;   MOV @R1, #48H
+                       297     ;
+                       298     ;   INC R1
+                       299     ;   MOV @R1, #80H
+                       300     ;
+                       301     ;   INC R1
+                       302     ;   MOV @R1, #87H
+                       303     ;   INC R1
+                       304     ;   MOV @R1, #46H
+                       305     ;   INC R1
+                       306     ;   MOV @R1, #4BH
+                       307     ;   INC R1
+                       308     ;   MOV @R1, #48H
+                       309
+                       310        ;;Decode and Load Map
+                       311      LOAD_MAP:
+                       312           ;;;Initialize map with open sea tiles
+00E8 753344            313      MOV TILE_ID, #OPEN_SEA
+00EB 753001            314      MOV MAP_NO, #1
+00EE 307F03            315      JNB P1_P2, SKIP2
+00F1 753002            316      MOV MAP_NO, #2
+                       317      SKIP2:
+00F4 7135              318      ACALL FILL_MAP
+                       319
+                       320           ;;;Load Legend
+00F6 7940              321      MOV R1, #P1_MAP_START ; Row 0
+00F8 307F02            322      JNB P1_P2, SKIP3
+00FB 7980              323      MOV R1, #P2_MAP_START
+                       324      SKIP3:
+00FD 770D              325      MOV @R1, #CHAR_POUND_SIGN
+00FF 09                326      INC R1
+0100 7701              327      MOV @R1, #CHAR_1
+0102 09                328      INC R1
+0103 7702              329      MOV @R1, #CHAR_2
+0105 09                330      INC R1
+0106 7703              331      MOV @R1, #CHAR_3
+0108 09                332      INC R1
+0109 7704              333      MOV @R1, #CHAR_4
+010B 09                334      INC R1
+010C 7705              335      MOV @R1, #CHAR_5
+010E 09                336      INC R1
+010F 7706              337      MOV @R1, #CHAR_6
+0111 09                338      INC R1
+0112 7707              339      MOV @R1, #CHAR_7
+                       340
+0114 7940              341      MOV R1, #P1_MAP_START ; Row 0
+0116 307F02            342      JNB P1_P2, SKIP4
+0119 7980              343      MOV R1, #P2_MAP_START
+                       344      SKIP4:
+011B E9                345      MOV A, R1
+011C 2408              346      ADD A, #8
+011E F9                347      MOV R1, A
+011F 7721              348      MOV @R1, #CHAR_A
+0121 2408              349      ADD A, #8
+0123 F9                350      MOV R1, A
+0124 7722              351      MOV @R1, #CHAR_B
+0126 2408              352      ADD A, #8
+0128 F9                353      MOV R1, A
+0129 7723              354      MOV @R1, #CHAR_C
+012B 2408              355      ADD A, #8
+012D F9                356      MOV R1, A
+012E 7724              357      MOV @R1, #CHAR_D
+0130 2408              358      ADD A, #8
+0132 F9                359      MOV R1, A
+0133 7725              360      MOV @R1, #CHAR_E
+0135 2408              361      ADD A, #8
+0137 F9                362      MOV R1, A
+0138 7726              363      MOV @R1, #CHAR_F
+013A 2408              364      ADD A, #8
+013C F9                365      MOV R1, A
+013D 7727              366      MOV @R1, #CHAR_G
+                       367           ;;;Load Ships
+                       368             ;Format: R0 reads the map code,
+                       369             ;TILE_ROW Keeps row count
+                       370             ;TILE_COL Keeps col count
+013F 78C0              371      MOV R0, #TEXT_SCR_MAP_START; This location is temporarily used for holding encoded map before decodi
+                       372
+                       373             ;Encoding is such that if the MSB is 1, the byte maps the blank tiles
+                       374             ; in its respectively numbered row. IF the MSB is 0, the byte contains
+                       375             ; the ID of the tile with the order respective to its row mapping byte.
+0141 753100            376      MOV TILE_ROW, #0 ;0 is normal
+0144 753201            377      MOV TILE_COL, #1
+                       378
+                       379      NEXT_MAP_CODE_BYTE:
+0147 E6                380      MOV A, @R0
+0148 C3                381      CLR C
+0149 33                382      RLC A  ;MSB is checked
+014A 4003              383      JC A_IS_ROW_MAPPER
+                       384      A_IS_TILE_ID:
+014C 08                385      INC R0
+014D 80F8              386      SJMP NEXT_MAP_CODE_BYTE
+                       387
+                       388      A_IS_ROW_MAPPER:
+014F 0531              389      INC TILE_ROW
+0151 753200            390      MOV TILE_COL, #0
+0154 33                391      RLC A; ;Checking bit 6
+0155 0532              392      INC TILE_COL ;Column 1
+0157 5002              393      JNC COL2
+0159 318D              394      ACALL LOAD_TILE; If the bit is 1, a tile needs to be loaded
+                       395      COL2:
+015B 33                396      RLC A; ;Checking bit 5
+015C 0532              397      INC TILE_COL
+015E 5002              398      JNC COL3
+0160 318D              399      ACALL LOAD_TILE
+                       400      COL3:
+0162 33                401      RLC A; ;Checking bit 4
+0163 0532              402      INC TILE_COL
+0165 5002              403      JNC COL4
+0167 318D              404      ACALL LOAD_TILE
+                       405      COL4:
+0169 33                406      RLC A; ;Checking bit 3
+016A 0532              407      INC TILE_COL
+016C 5002              408      JNC COL5
+016E 318D              409      ACALL LOAD_TILE
+                       410      COL5:
+0170 33                411      RLC A; ;Checking bit 2
+0171 0532              412      INC TILE_COL
+0173 5002              413      JNC COL6
+0175 318D              414      ACALL LOAD_TILE
+                       415      COL6:
+0177 33                416      RLC A; ;Checking bit 1
+0178 0532              417      INC TILE_COL
+017A 5002              418      JNC COL7
+017C 318D              419      ACALL LOAD_TILE
+                       420      COL7:
+017E 33                421      RLC A; ;Checking bit 0
+017F 0532              422      INC TILE_COL
+0181 5002              423      JNC END_ROW
+0183 318D              424      ACALL LOAD_TILE
+                       425      END_ROW:
+0185 08                426      INC R0 ;
+0186 E531              427      MOV A, TILE_ROW
+0188 B407BC            428      CJNE A, #7, NEXT_MAP_CODE_BYTE ;End of Row 7 (Row G) is end of loading
+018B 800C              429      SJMP MAP_LOADED
+                       430
+                       431      LOAD_TILE:
+018D C0E0              432      PUSH ACC
+018F 08                433      INC R0
+0190 8633              434      MOV TILE_ID, @R0
+0192 7107              435      ACALL SELECT_TILE
+0194 A733              436      MOV @R1, TILE_ID
+0196 D0E0              437      POP ACC
+0198 22                438      RET
+                       439
+                       440
+                       441        ;;SETUP P2 MAP
+                       442      MAP_LOADED:
+                       443
+0199 B27F              444      CPL P1_P2
+019B 307F03            445      JNB  P1_P2, MAP_2_LOADED
+019E 02000D            446      LJMP MAP_SETUP
+                       447
+                       448      MAP_2_LOADED:
+                       449      ;Maps are complete.
+                       450
+                       451
+                       452     ;MAIN GAME
+01A1 753604            453      MOV P1_SHIPS_LEFT, #HITS_TO_WIN
+01A4 753704            454      MOV P2_SHIPS_LEFT, #HITS_TO_WIN
+                       455
+01A7 D27F              456      SETB P1_P2; P1 will start
+                       457
+01A9 307B02            458      JNB SIMUL, MAIN_GAME
+01AC 9117              459      ACALL KEYBOARD
+                       460
+                       461     MAIN_GAME:
+01AE B27F              462      CPL P1_P2 ;
+                       463        ;;Start Turn: Load Info screen "Press "9" to begin turn"
+01B0 753003            464      MOV MAP_NO, #3
+                       465
+01B3 753340            466      MOV TILE_ID, #BLANK_TILE
+01B6 7135              467      ACALL FILL_MAP
+                       468
+01B8 753101            469      MOV TILE_ROW, #1
+01BB 753203            470      MOV TILE_COL, #3
+01BE 7107              471      ACALL SELECT_TILE
+01C0 7730              472      MOV @R1, #CHAR_P
+01C2 09                473      INC R1
+01C3 7701              474      MOV @R1, #CHAR_1
+01C5 307F02            475      JNB P1_P2, SKIP77
+01C8 7702              476      MOV @R1, #CHAR_2
+                       477      SKIP77:
+01CA 753102            478      MOV TILE_ROW, #2
+01CD 753202            479      MOV TILE_COL, #2
+01D0 7107              480      ACALL SELECT_TILE
+01D2 7725              481      MOV @R1, #CHAR_E
+01D4 09                482      INC R1
+01D5 772E              483      MOV @R1, #CHAR_N
+01D7 09                484      INC R1
+01D8 7734              485      MOV @R1, #CHAR_T
+01DA 09                486      INC R1
+01DB 7725              487      MOV @R1, #CHAR_E
+01DD 09                488      INC R1
+01DE 7732              489      MOV @R1, #CHAR_R
+01E0 753103            490      MOV TILE_ROW, #3
+01E3 753201            491      MOV TILE_COL, #1
+01E6 7107              492      ACALL SELECT_TILE
+01E8 770F              493      MOV @R1, #CHAR_SPCH_MARKS
+01EA 09                494      INC R1
+01EB 7709              495      MOV @R1, #CHAR_9
+01ED 09                496      INC R1
+01EE 770F              497      MOV @R1, #CHAR_SPCH_MARKS
+01F0 09                498      INC R1
+01F1 770A              499      MOV @R1, #CHAR_SPACE
+01F3 09                500      INC R1
+01F4 7734              501      MOV @R1, #CHAR_T
+01F6 09                502      INC R1
+01F7 772F              503      MOV @R1, #CHAR_O
+01F9 753104            504      MOV TILE_ROW, #4
+01FC 753202            505      MOV TILE_COL, #2
+01FF 7107              506      ACALL SELECT_TILE
+0201 7722              507      MOV @R1, #CHAR_B
+0203 09                508      INC R1
+0204 7725              509      MOV @R1, #CHAR_E
+0206 09                510      INC R1
+0207 7727              511      MOV @R1, #CHAR_G
+0209 09                512      INC R1
+020A 7729              513      MOV @R1, #CHAR_I
+020C 09                514      INC R1
+020D 772E              515      MOV @R1, #CHAR_N
+020F 753105            516      MOV TILE_ROW, #5
+0212 753202            517      MOV TILE_COL, #2
+0215 7107              518      ACALL SELECT_TILE
+0217 7734              519      MOV @R1, #CHAR_T
+0219 09                520      INC R1
+021A 7735              521      MOV @R1, #CHAR_U
+021C 09                522      INC R1
+021D 7732              523      MOV @R1, #CHAR_R
+021F 09                524      INC R1
+0220 772E              525      MOV @R1, #CHAR_N
+0222 D27D              526      SETB TEXT
+0224 71C1              527      ACALL UPDATE_LCD_ALL
+                       528
+                       529        ;;Receive input
+                       530      ENTER3:
+0226 9117              531      ACALL KEYBOARD
+0228 B439FB            532      CJNE A, #'9', ENTER3
+                       533
+                       534        ;;Load Player Screen
+022B 753001            535      MOV MAP_NO, #1
+022E 307F03            536      JNB P1_P2, SKIP5
+0231 753002            537      MOV MAP_NO, #2
+                       538      SKIP5:
+0234 C27D              539      CLR TEXT
+0236 71C1              540      ACALL UPDATE_LCD_ALL
+                       541
+                       542        ;;Receive Input
+                       543      RECEIVE_INPUT:
+0238 7534FF            544      MOV INPUT_I, #0FFH
+023B 7535FF            545      MOV INPUT_II,#0FFH
+                       546
+                       547      ENTER4:
+023E 9117              548      ACALL KEYBOARD
+0240 B43802            549      CJNE A, #'8', SKIP03 ;Enter 8 to clear
+0243 80F3              550      SJMP RECEIVE_INPUT
+                       551      SKIP03:
+0245 C3                552      CLR C
+0246 B44100            553      CJNE A, #'A', $+3 ;Check if Digit
+0249 4004              554      JC TO_INPUT_II
+024B F534              555      MOV INPUT_I, A
+024D 8002              556      SJMP INPUT_DONE_I
+                       557      TO_INPUT_II:
+024F F535              558      MOV INPUT_II, A
+                       559      INPUT_DONE_I:
+                       560
+                       561      ENTER5:
+0251 9117              562      ACALL KEYBOARD
+0253 B43802            563      CJNE A, #'8', SKIP04 ;Enter 8 to clear
+0256 80E0              564      SJMP RECEIVE_INPUT
+                       565      SKIP04:
+0258 C3                566      CLR C
+0259 B44100            567      CJNE A, #'A', $+3 ;Check if Digit
+025C 4004              568      JC TO_INPUT_II_
+025E F534              569      MOV INPUT_I, A
+0260 8002              570      SJMP INPUT_DONE_II
+                       571      TO_INPUT_II_:
+0262 F535              572      MOV INPUT_II, A
+                       573      INPUT_DONE_II:
+                       574
+0264 E534              575      MOV A, INPUT_I
+0266 B4FF02            576      CJNE A, #0FFH, SKIP6
+0269 80CD              577      SJMP RECEIVE_INPUT
+                       578      SKIP6:
+026B E535              579      MOV A, INPUT_II
+026D B4FF02            580      CJNE A, #0FFH, SKIP7
+0270 80C6              581      SJMP RECEIVE_INPUT
+                       582      SKIP7:
+                       583
+0272 9117              584      ACALL KEYBOARD ;Enter 9 to confirm
+0274 B439C1            585      CJNE A, #'9', RECEIVE_INPUT
+                       586      ;All inputs are considered. INPUT_I has a letter, and II has a number
+                       587
+                       588        ;;Update Model
+0277 E535              589      MOV A, INPUT_II
+0279 C3                590      CLR C
+027A 9430              591      SUBB A, #30H
+027C F532              592      MOV TILE_COL, A
+027E E534              593      MOV A, INPUT_I
+0280 C3                594      CLR C
+0281 9410              595      SUBB A, #16 ; 16? 14?
+0283 C3                596      CLR C
+0284 9430              597      SUBB A, #30H
+0286 F531              598      MOV TILE_ROW, A
+                       599
+0288 753002            600      MOV MAP_NO, #2
+028B 307F03            601      JNB P1_P2, SKIP8
+028E 753001            602      MOV MAP_NO, #1
+                       603      SKIP8:
+0291 7107              604      ACALL SELECT_TILE
+0293 E7                605      MOV A, @R1
+0294 240A              606      ADD A, #10
+                       607      ;A tile that was hit twice is restored to its original state:
+0296 C3                608      CLR C
+0297 B45800            609      CJNE A, #HIT_TWICE, $+3
+029A 400B              610      JC SKIP_CORRECTION
+029C 940A              611      SUBB A, #10
+029E 0537              612      INC P2_SHIPS_LEFT;P2 is not hit by P1 on a duplicate
+02A0 307F04            613      JNB P1_P2, SKIP_CORRECTION
+02A3 1537              614      DEC P2_SHIPS_LEFT ;Undo erronous adjustment
+02A5 0536              615      INC P1_SHIPS_LEFT ;P1 is not hit by P2 on a duplicate
+                       616      SKIP_CORRECTION:
+02A7 F7                617      MOV @R1, A
+                       618
+02A8 B44E02            619      CJNE A, #HIT_SEA, SKIP10
+02AB 8009              620      SJMP SKIP11
+                       621      SKIP10:
+                       622
+02AD 207F04            623      JB P1_P2, P1_WAS_HIT
+                       624      P2_WAS_HIT:
+02B0 1537              625      DEC P2_SHIPS_LEFT
+02B2 8002              626      SJMP SKIP11
+                       627      P1_WAS_HIT:
+02B4 1536              628      DEC P1_SHIPS_LEFT
+                       629      SKIP11:
+                       630
+                       631        ;;Update Radar
+                       632      ;MAP_NO?**
+                       633      ;SETB RADAR
+                       634      ;ACALL UPDATE_LCD_COL
+                       635      ;CLR RADAR
+02B6 C27D              636      CLR TEXT
+02B8 71C1              637      ACALL UPDATE_LCD_ALL
+                       638
+                       639        ;;Wait for input "9" to end turn
+                       640      ENTER6:
+02BA 9117              641      ACALL KEYBOARD
+02BC B439FB            642      CJNE A, #'9', ENTER6
+                       643
+                       644        ;;Check for Winner
+02BF E536              645      MOV A, P1_SHIPS_LEFT
+02C1 600A              646      JZ END_P2_WIN
+02C3 E537              647      MOV A, P2_SHIPS_LEFT
+02C5 6002              648      JZ END_P1_WIN
+                       649        ;;Start next turn
+02C7 21AE              650      AJMP MAIN_GAME
+                       651
+                       652     ;END OF GAME
+                       653
+                       654      END_P1_WIN:
+02C9 C27F              655      CLR P1_P2
+02CB 8004              656      SJMP ANNOUNCE
+                       657
+                       658      END_P2_WIN:
+02CD D27F              659      SETB P1_P2
+02CF 8000              660      SJMP ANNOUNCE
+                       661
+                       662        ;;Announce winner of info screen
+                       663      ANNOUNCE:
+02D1 753003            664      MOV MAP_NO, #3
+02D4 753340            665      MOV TILE_ID, #BLANK_TILE
+02D7 7135              666      ACALL FILL_MAP
+                       667
+02D9 753003            668      MOV MAP_NO, #3
+02DC 753101            669      MOV TILE_ROW, #1
+02DF 753203            670      MOV TILE_COL, #3
+02E2 7107              671      ACALL SELECT_TILE
+02E4 7730              672      MOV @R1, #CHAR_P
+02E6 09                673      INC R1
+02E7 7701              674      MOV @R1, #CHAR_1
+02E9 307F02            675      JNB P1_P2, SKIP12
+02EC 7702              676      MOV @R1, #CHAR_2
+                       677      SKIP12:
+02EE 753102            678      MOV TILE_ROW, #2
+02F1 753202            679      MOV TILE_COL, #2
+02F4 7107              680      ACALL SELECT_TILE
+02F6 7737              681      MOV @R1, #CHAR_W
+02F8 09                682      INC R1
+02F9 7729              683      MOV @R1, #CHAR_I
+02FB 09                684      INC R1
+02FC 772E              685      MOV @R1, #CHAR_N
+02FE 09                686      INC R1
+02FF 7733              687      MOV @R1, #CHAR_S
+0301 D27D              688      SETB TEXT
+0303 71C1              689      ACALL UPDATE_LCD_ALL
+                       690
+                       691
+                       692        ;;Ask for replay?
+0305 80FE              693      SJMP $
+                       694
+                       695     ;=========================================================
+                       696     ; ;;METHODS;; ;
+                       697     ;=========================================================
+                       698      SELECT_TILE: ;Moves to R1 the RAM location of the tile at the specified map, row, and col
+                       699                   ;USES: R7, R6, R1, A, TILE_ROW, TILE_COL, MAP_NO
+0307 E530              700      MOV A, MAP_NO
+0309 C3                701      CLR C
+030A B40200            702      CJNE A, #2, $+3
+030D 5006              703      JNC NEXT_1
+030F 7940              704      MOV R1, #P1_MAP_START
+0311 7E7F              705      MOV R6, #P1_MAP_END
+0313 800F              706      SJMP STARTED
+                       707      NEXT_1:
+0315 B40300            708      CJNE A, #3, $+3
+0318 5006              709      JNC NEXT_2
+031A 7980              710      MOV R1, #P2_MAP_START
+031C 7EBF              711      MOV R6, #P2_MAP_END
+031E 8004              712      SJMP STARTED
+                       713      NEXT_2:
+0320 79C0              714      MOV R1, #TEXT_SCR_MAP_START
+0322 7EFF              715      MOV R6, #TEXT_SCR_MAP_END
+                       716
+                       717      STARTED:
+0324 207C12            718      JB FILLER_SHORTCUT, FILLER
+                       719
+0327 AF31              720      MOV R7, TILE_ROW
+0329 E9                721      MOV A, R1
+                       722      ADD_LOOP1:
+032A 2408              723      ADD A, #8
+032C DFFC              724      DJNZ R7, ADD_LOOP1
+                       725
+032E AF32              726      MOV R7, TILE_COL
+                       727      ADD_LOOP2:
+0330 04                728      INC A
+0331 DFFD              729      DJNZ R7, ADD_LOOP2
+0333 F9                730      MOV R1, A
+0334 22                731      RET
+                       732
+                       733     ;=========================================================
+                       734      FILL_MAP:    ;Fills the selected map entirely with the tile in TILE_ID
+0335 D27C              735      SETB FILLER_SHORTCUT
+0337 80CE              736      SJMP SELECT_TILE
+                       737      FILLER:
+0339 C27C              738      CLR FILLER_SHORTCUT
+                       739
+033B E9                740      MOV A, R1
+                       741      FILL_LOOP:
+033C A733              742      MOV @R1, TILE_ID
+033E 09                743      INC R1
+033F 04                744      INC A
+0340 B506F6            745      CJNE A, 06, FILLER
+0343 A733              746      MOV @R1, TILE_ID  ;Fills final register
+0345 22                747      RET
+                       748
+                       749     ;=========================================================
+                       750      WRITE_TILE:
+0346 7F08              751      MOV R7, #8
+0348 8008              752      SJMP GET_PIXELS
+                       753
+                       754      NEXT_BYTE:
+034A E4                755      CLR A
+034B 93                756      MOVC A, @A+DPTR
+034C 91E9              757      ACALL SEND_BYTE
+034E A3                758      INC DPTR
+034F DFF9              759      DJNZ R7, NEXT_BYTE
+                       760
+0351 22                761      RET
+                       762
+                       763     ;=========================================================
+                       764      GET_PIXELS:;(Now part of WRITE_TILE Method)
+                       765                ; Moves to DPTR location first of 8 consecutive pixel bytes defining a tile
+                       766                ; Uses: A, DPTR, TILE_ID
+0352 E533              767      MOV A, TILE_ID
+0354 30E708            768      JNB ACC.7, IS_ID
+0357 9005A0            769      MOV DPTR, #DIGITS_SYMBOLS;If the tile ID is not generic...
+035A 75330B            770      MOV TILE_ID, #CHAR_Q_MARK
+035D 8013              771      SJMP TBL_FOUND
+                       772      IS_ID:
+035F 20E60D            773      JB ACC.6, PICTURE_ID
+0362 20E505            774      JB ACC.5, LETTER_ID
+                       775
+                       776      DIGIT_SYMBOL_ID:
+0365 9005A0            777      MOV DPTR, #DIGITS_SYMBOLS
+0368 8008              778      SJMP TBL_FOUND
+                       779
+                       780      LETTER_ID:
+036A 900630            781      MOV DPTR, #LETTERS
+036D 8003              782      SJMP TBL_FOUND
+                       783
+                       784      PICTURE_ID:
+036F 900708            785      MOV DPTR, #PICTURES
+                       786
+                       787      TBL_FOUND:
+0372 541F              788      ANL A, #1FH ;Remove first 3 bits
+0374 600B              789      JZ END_OF_PROPAGATION
+                       790
+                       791      PROPAGATE:
+0376 A3                792      INC DPTR
+0377 A3                793      INC DPTR
+0378 A3                794      INC DPTR
+0379 A3                795      INC DPTR
+                       796
+037A A3                797      INC DPTR
+037B A3                798      INC DPTR
+037C A3                799      INC DPTR
+037D A3                800      INC DPTR
+                       801
+037E D5E0F5            802      DJNZ ACC, PROPAGATE
+                       803      END_OF_PROPAGATION:
+                       804
+0381 80C7              805      SJMP NEXT_BYTE
+                       806
+                       807     ;=========================================================
+                       808      UPDATE_LCD_COL:
+                       809      ;WRITES TO LCD AN ENTIRE COLUMN OF THE SELECTED MAP
+                       810      ;**MAP NO, RADAR, AND CHIP SELECT NEED TO BE PREPARED BEFORE CALLING THIS METHOD
+0383 753107            811      MOV TILE_ROW, #7
+0386 7107              812      ACALL SELECT_TILE; Last Tile_Col is retained
+                       813
+                       814      COL_LOOP:
+0388 8733              815      MOV TILE_ID, @R1
+038A 207E02            816      JB RADAR, RADAR_MODE
+038D 8023              817      SJMP MOVE_TO_NEXT
+                       818
+                       819      RADAR_MODE:
+038F E533              820      MOV A, TILE_ID
+0391 C3                821      CLR C
+0392 B44000            822      CJNE A, #BLANK_TILE, $+3
+0395 401B              823      JC MOVE_TO_NEXT ;Dont Overwrite axes (ID < #BLANK_TILE)
+0397 B44E05            824      CJNE A, #HIT_SEA, NOT_MISS
+039A 753343            825      MOV TILE_ID, #RADAR_MISSED
+039D 8013              826      SJMP MOVE_TO_NEXT
+                       827      NOT_MISS:
+039F C3                828      CLR C
+03A0 944E              829      SUBB A, #HIT_SEA
+03A2 C3                830      CLR C
+03A3 B40A00            831      CJNE A, #10, $+3 ;Carry is set if A has a hit ship tile ***
+03A6 5005              832      JNC NOT_HIT
+03A8 753342            833      MOV TILE_ID, #RADAR_HIT
+03AB 8005              834      SJMP MOVE_TO_NEXT
+                       835      NOT_HIT:
+03AD 753341            836      MOV TILE_ID, #RADAR_TGT
+03B0 8000              837      SJMP MOVE_TO_NEXT
+                       838
+                       839       ;;MOVE TO NEXT TILE
+                       840      MOVE_TO_NEXT:
+03B2 7146              841      ACALL WRITE_TILE
+03B4 E9                842      MOV A, R1
+03B5 C3                843      CLR C
+03B6 9408              844      SUBB A,#8
+03B8 F9                845      MOV R1, A
+                       846      ;DJNZ TILE_ROW, COL_LOOP
+03B9 1531              847      DEC TILE_ROW
+03BB E531              848      MOV A, TILE_ROW
+03BD B4FFC8            849      CJNE A, #0FFH, COL_LOOP
+                       850
+03C0 22                851      RET
+                       852
+                       853     ;=========================================================
+                       854      UPDATE_LCD_ALL:
+                       855      ;;Clear Disp and Select Chip (SET/CLR TEXT BEFOREHAND)
+03C1 91A1              856      ACALL CONFIGURE_LCD
+                       857
+03C3 D2B4              858      SETB CS_1
+03C5 C2B3              859      CLR  CS_2
+03C7 C27E              860      CLR RADAR
+                       861
+03C9 753003            862      MOV MAP_NO, #3
+03CC 207D09            863      JB TEXT, NEXT_3
+03CF 753001            864      MOV MAP_NO, #1
+03D2 307F03            865      JNB P1_P2, NEXT_3
+03D5 753002            866      MOV MAP_NO, #2
+                       867      NEXT_3:
+                       868
+03D8 7D08              869      MOV R5, #8
+03DA 753200            870      MOV TILE_COL, #0
+03DD 7504B7            871      MOV LCD_COUNTER_1, #0B7H
+                       872
+                       873      LCD_LOOP:
+03E0 0504              874      INC LCD_COUNTER_1
+03E2 E504              875      MOV A, LCD_COUNTER_1
+03E4 91DC              876      ACALL SEND_CMD
+03E6 7183              877      ACALL UPDATE_LCD_COL
+03E8 0532              878      INC TILE_COL
+03EA DDF4              879      DJNZ R5, LCD_LOOP
+                       880
+03EC 207D27            881      JB TEXT, SKIP_CHIP_2
+03EF D2B3              882      SETB CS_2
+03F1 C2B4              883      CLR  CS_1
+03F3 B27F              884      CPL P1_P2
+03F5 D27E              885      SETB RADAR
+                       886
+03F7 753001            887      MOV MAP_NO, #1
+03FA 307F03            888      JNB P1_P2, NEXT_4
+03FD 753002            889      MOV MAP_NO, #2
+                       890      NEXT_4:
+                       891
+0400 7D08              892      MOV R5, #8
+0402 753200            893      MOV TILE_COL, #0
+0405 7504B7            894      MOV LCD_COUNTER_1, #0B7H
+                       895
+                       896      LCD_LOOP_2:
+0408 0504              897      INC LCD_COUNTER_1
+040A E504              898      MOV A, LCD_COUNTER_1
+040C 91DC              899      ACALL SEND_CMD
+040E 7183              900      ACALL UPDATE_LCD_COL
+0410 0532              901      INC TILE_COL
+0412 DDF4              902      DJNZ R5, LCD_LOOP_2
+                       903
+0414 B27F              904      CPL P1_P2
+                       905      SKIP_CHIP_2:
+0416 22                906      RET
+                       907
+                       908
+                       909     ;=========================================================
+                       910      KEYBOARD: ;takes the key pressed from the keyboard and puts it to A
+0417 7580FF            911             MOV     P0, #0ffh       ;makes P0 input
+                       912      K1:
+041A 75A000            913             MOV     P2, #0  ;ground all rows
+041D E580              914             MOV     A, P0
+041F 540F              915             ANL     A, #00001111B
+0421 B40FF6            916             CJNE    A, #00001111B, K1
+                       917      K2:
+0424 9190              918             ACALL   DELAY
+0426 E580              919             MOV     A, P0
+0428 540F              920             ANL     A, #00001111B
+042A B40F02            921             CJNE    A, #00001111B, KB_OVER
+042D 80F5              922             SJMP    K2
+                       923      KB_OVER:
+042F 9190              924             ACALL DELAY
+0431 E580              925             MOV     A, P0
+0433 540F              926             ANL     A, #00001111B
+0435 B40F02            927             CJNE    A, #00001111B, KB_OVER1
+0438 80EA              928             SJMP    K2
+                       929      KB_OVER1:
+043A 75A0FE            930             MOV     P2, #11111110B
+043D E580              931             MOV     A, P0
+043F 540F              932             ANL     A, #00001111B
+0441 B40F21            933             CJNE    A, #00001111B, ROW_0
+0444 75A0FD            934             MOV     P2, #11111101B
+0447 E580              935             MOV     A, P0
+0449 540F              936             ANL     A, #00001111B
+044B B40F1C            937             CJNE    A, #00001111B, ROW_1
+044E 75A0FB            938             MOV     P2, #11111011B
+0451 E580              939             MOV     A, P0
+0453 540F              940             ANL     A, #00001111B
+0455 B40F17            941             CJNE    A, #00001111B, ROW_2
+0458 75A0F7            942             MOV     P2, #11110111B
+045B E580              943             MOV     A, P0
+045D 540F              944             ANL     A, #00001111B
+045F B40F12            945             CJNE    A, #00001111B, ROW_3
+0462 020424            946             LJMP    K2
+                       947
+                       948      ROW_0:
+0465 900480            949             mov     DPTR, #KCODE0
+0468 800D              950             sjmp    KB_FIND
+                       951      ROW_1:
+046A 900484            952             mov     DPTR, #KCODE1
+046D 8008              953             sjmp    KB_FIND
+                       954      ROW_2:
+046F 900488            955             mov     DPTR, #KCODE2
+0472 8003              956             sjmp    KB_FIND
+                       957      ROW_3:
+0474 90048C            958             mov     DPTR, #KCODE3
+                       959      KB_FIND:
+0477 13                960             rrc     A
+0478 5003              961             jnc     KB_MATCH
+047A A3                962             inc     DPTR
+047B 80FA              963             sjmp    KB_FIND
+                       964      KB_MATCH:
+047D E4                965             clr     A
+047E 93                966             movc    A, @A+DPTR; get ASCII code from the table
+047F 22                967             ret
+                       968
+                       969     ;ASCII look-up table
+0480 31323341          970      KCODE0:        DB      '1', '2', '3', 'A'
+0484 34353642          971      KCODE1:        DB      '4', '5', '6', 'B'
+0488 37383943          972      KCODE2:        DB      '7', '8', '9', 'C'
+048C 47464544          973      KCODE3:        DB      'G', 'F', 'E', 'D' ;
+                       974     ;=========================================================
+                       975      DELAY:
+0490 C000              976             push 0
+0492 C001              977             push 1
+0494 7F32              978             mov R7,#50;50 in hardware
+                       979      DELAY_OUTER_LOOP:
+0496 7E96              980             mov R6,#150;150 in hardware
+0498 DEFE              981             djnz R6,$
+049A DFFA              982             djnz R7,DELAY_OUTER_LOOP
+049C D001              983             pop 1
+049E D000              984             pop 0
+04A0 22                985             ret
+                       986     ;=========================================================
+                       987     ;GRAPHIC LCD METHODS
+                       988     ;=========================================================
+                       989     CONFIGURE_LCD:
+                       990
+                       991      ;   ;;DELAY 32ms (delay why)
+                       992      ; MOV TMOD,#01H
+                       993      ; MOV TH0, #HIGH (33536)
+                       994      ; MOV TL0, #LOW  (33536)
+                       995      ; CLR TF0
+                       996      ; SETB TR0
+                       997      ; JNB TF0, $
+                       998      ; CLR TR0
+                       999
+04A1 C2B2             1000      CLR LCD_RESET
+04A3 00               1001      NOP
+04A4 00               1002      NOP
+04A5 D2B2             1003      SETB LCD_RESET ;active low
+                      1004
+04A7 D2B4             1005      SETB  CS_1
+04A9 D2B3             1006      SETB  CS_2
+                      1007
+                      1008
+04AB 743F             1009      MOV  A, #00111111b; Set disp ON  ( I thınk you should  have changed the  order)
+04AD 91DC             1010      ACALL SEND_CMD
+                      1011
+04AF 74B8             1012      MOV A,#0B8H; make x addrs0
+04B1 91DC             1013      ACALL SEND_CMD
+                      1014
+04B3 7440             1015      MOV A,#040H;  make  y addrs 0
+04B5 91DC             1016      ACALL SEND_CMD
+                      1017
+04B7 74C0             1018      MOV  A, #11000000b; Set disp line to first line
+04B9 91DC             1019      ACALL SEND_CMD
+                      1020
+04BB 7C00             1021      MOV R4,#0;y values
+04BD 7BB8             1022      MOV R3,#10111000B;x values
+04BF EB               1023      VER:MOV A,R3
+04C0 91DC             1024      ACALL SEND_CMD
+04C2 E4               1025      HOR:CLR A
+04C3 91E9             1026      ACALL SEND_BYTE
+04C5 0C               1027      INC R4
+04C6 BC40F9           1028      CJNE R4,#64,HOR
+04C9 7C00             1029      MOV R4,#0
+04CB 0B               1030      INC R3
+04CC BBC0F0           1031      CJNE R3,#11000000B,VER
+                      1032
+04CF 74B8             1033      MOV A,#0B8H; make x addrs0
+04D1 91DC             1034      ACALL SEND_CMD
+                      1035
+04D3 7440             1036      MOV A,#040H;  make  y addrs 0
+04D5 91DC             1037      ACALL SEND_CMD
+                      1038
+04D7 74C0             1039      MOV  A, #11000000b; Set disp line to first line
+04D9 91DC             1040      ACALL SEND_CMD
+                      1041
+04DB 22               1042      RET
+                      1043     ;=========================================================
+                      1044      SEND_CMD:
+04DC F590             1045      MOV  LCD_PORT, A
+04DE C2B6             1046      CLR  RD_WR;
+04E0 C2B7             1047      CLR  RS
+04E2 D2B5             1048      SETB ENABLE
+04E4 00               1049      NOP
+04E5 00               1050      NOP
+04E6 C2B5             1051      CLR  ENABLE
+04E8 22               1052      RET
+                      1053     ;=========================================================
+                      1054      SEND_BYTE:
+04E9 F590             1055      MOV  LCD_PORT, A
+04EB C2B6             1056      CLR  RD_WR;;  MOV R4,#0;y values
+04ED D2B7             1057      SETB RS   ; is this DATACOMMAND ?
+04EF D2B5             1058      SETB ENABLE
+04F1 00               1059      NOP
+04F2 00               1060      NOP
+04F3 C2B5             1061      CLR  ENABLE
+04F5 22               1062      RET
+                      1063     ;=========================================================
+                      1064     ;EEPROM METHODS
+                      1065     ;=========================================================
+04F6 C0E0             1066     write_data:     push acc ;;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+04F8 12053C           1067         call eeprom_start
+04FB 74A0             1068                     mov a, #0A0H
+04FD 253A             1069                     add a, EEPROM_PAGE_NO
+04FF 253A             1070                     add a, EEPROM_PAGE_NO
+0501 120556           1071                     call send_data
+0504 E538             1072                     mov a,memory_address1          ;location address
+0506 120556           1073                     call send_data
+0509 E539             1074                     mov a,eeprom_data              ;data to be send
+050B 120556           1075                     call send_data
+050E 120549           1076                     call eeprom_stop
+0511 D0E0             1077                     pop acc ;;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+0513 22               1078                     ret
+                      1079     ;=========================================================
+0514 C0E0             1080     read_data:      push acc ;;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+0516 12053C           1081         call eeprom_start
+                      1082
+0519 74A0             1083                     mov a, #0A0H
+051B 253A             1084                     add a, EEPROM_PAGE_NO
+051D 253A             1085                     add a, EEPROM_PAGE_NO
+051F 120556           1086                     call send_data
+0522 E538             1087                     mov a,memory_address1          ;location address
+0524 120556           1088                     call send_data
+0527 12053C           1089                     call eeprom_start
+052A 74A1             1090                     mov a, #0A1H
+052C 253A             1091                     add a, EEPROM_PAGE_NO
+052E 253A             1092                     add a, EEPROM_PAGE_NO
+0530 120556           1093                     call send_data
+0533 120572           1094                     call get_data
+0536 120549           1095                     call eeprom_stop
+0539 D0E0             1096                     pop acc ;;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+053B 22               1097                     ret
+                      1098     ;=========================================================
+053C D2A5             1099     eeprom_start:    setb eeprom_sda_pin
+053E 00               1100                     nop
+053F D2A4             1101                     setb eeprom_scl_pin
+0541 00               1102                     nop
+0542 00               1103                     nop
+0543 C2A5             1104                     clr eeprom_sda_pin
+0545 00               1105                     nop
+0546 C2A4             1106                     clr eeprom_scl_pin
+0548 22               1107                     ret
+                      1108     ;=========================================================
+0549 C2A5             1109     eeprom_stop:     clr eeprom_sda_pin
+054B 00               1110                     nop
+054C D2A4             1111                     setb eeprom_scl_pin
+054E 00               1112                     nop
+054F 00               1113                     nop
+0550 D2A5             1114                     setb eeprom_sda_pin
+0552 00               1115                     nop
+0553 C2A4             1116                     clr eeprom_scl_pin
+0555 22               1117                     ret
+                      1118     ;=========================================================
+0556 C007             1119     send_data:      push 7 ;;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+0558 7F00             1120         mov r7,#00h
+055A 33               1121     send:           rlc a
+055B 92A5             1122                    mov eeprom_sda_pin,c
+055D 12058C           1123                    call clock
+0560 0F               1124                    inc r7
+0561 BF08F6           1125                    cjne r7,#08,send
+0564 D2A5             1126                    setb eeprom_sda_pin
+0566 20A5FD           1127                    jb eeprom_sda_pin,$
+0569 120593           1128                   call eeprom_delay
+056C 12058C           1129                    call clock
+056F D007             1130                    pop 7 ;;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+0571 22               1131                    ret
+                      1132     ;=========================================================
+0572 C007             1133     get_data:      push 7;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+0574 7F00             1134                    mov r7,#00h
+0576 D2A5             1135                    setb eeprom_sda_pin
+0578 A2A5             1136     get:            mov c,eeprom_sda_pin
+057A 12058C           1137                    call clock
+057D 33               1138                    rlc a
+057E 0F               1139                    inc r7
+057F BF08F6           1140                    cjne r7,#08,get
+0582 D2A5             1141                    setb eeprom_sda_pin
+0584 12058C           1142                    call clock
+0587 F53B             1143                    mov EEPROM_BUFF,a
+0589 D007             1144                    pop 7;;;;;;;;;;;;;;;;;;;;;;;;;;   PROTECT DATA
+058B 22               1145                    ret
+                      1146     ;=========================================================
+058C D2A4             1147     clock:         setb eeprom_scl_pin
+058E 00               1148                    nop
+058F 00               1149                    nop
+0590 C2A4             1150                    clr eeprom_scl_pin
+0592 22               1151                    ret
+                      1152     ;=========================================================
+0593 75330B           1153     eeprom_delay:      mov 33h,#11      ;delay of 3 mili seconds
+0596 7532FF           1154     eeprom_delay_1:    mov 32h,#0ffh
+0599 D532FD           1155                        djnz 32h,$
+059C D533F7           1156                        djnz 33h,eeprom_delay_1
+059F 22               1157                        ret
+                      1158
+                      1159     ;=========================================================
+                      1160     ; ;;TILE_ID_TABLE;; ;
+  0000                1161     CHAR_0          EQU 00H ;000XXXXX: DIGITS & SYMBOLS
+  0001                1162     CHAR_1          EQU 01H
+  0002                1163     CHAR_2          EQU 02H
+  0003                1164     CHAR_3          EQU 03H
+  0004                1165     CHAR_4          EQU 04H
+  0005                1166     CHAR_5          EQU 05H
+  0006                1167     CHAR_6          EQU 06H
+  0007                1168     CHAR_7          EQU 07H
+  0008                1169     CHAR_8          EQU 08H
+  0009                1170     CHAR_9          EQU 09H
+  000A                1171     CHAR_SPACE      EQU 0AH
+  000B                1172     CHAR_Q_MARK     EQU 0BH
+  000C                1173     CHAR_EXCL_MARK  EQU 0CH
+  000D                1174     CHAR_POUND_SIGN EQU 0DH
+  000E                1175     CHAR_UNDERSCORE EQU 0EH
+  000F                1176     CHAR_SPCH_MARKS EQU 0FH
+  0010                1177     CHAR_APOSTROPHE EQU 10H
+  0011                1178     CHAR_ASTERISK   EQU 11H
+                      1179                             ;12H-20H are unused
+  0021                1180     CHAR_A          EQU 21H ;001XXXXX: LETTERS
+  0022                1181     CHAR_B          EQU 22H
+  0023                1182     CHAR_C          EQU 23H
+  0024                1183     CHAR_D          EQU 24H
+  0025                1184     CHAR_E          EQU 25H
+  0026                1185     CHAR_F          EQU 26H
+  0027                1186     CHAR_G          EQU 27H
+  0028                1187     CHAR_H          EQU 28H
+  0029                1188     CHAR_I          EQU 29H
+  002A                1189     CHAR_J          EQU 2AH
+  002B                1190     CHAR_K          EQU 2BH
+  002C                1191     CHAR_L          EQU 2CH
+  002D                1192     CHAR_M          EQU 2DH
+  002E                1193     CHAR_N          EQU 2EH
+  002F                1194     CHAR_O          EQU 2FH
+  0030                1195     CHAR_P          EQU 30H
+  0031                1196     CHAR_Q          EQU 31H
+  0032                1197     CHAR_R          EQU 32H
+  0033                1198     CHAR_S          EQU 33H
+  0034                1199     CHAR_T          EQU 34H
+  0035                1200     CHAR_U          EQU 35H
+  0036                1201     CHAR_V          EQU 36H
+  0037                1202     CHAR_W          EQU 37H
+  0038                1203     CHAR_X          EQU 38H
+  0039                1204     CHAR_Y          EQU 39H
+  003A                1205     CHAR_Z          EQU 3AH
+                      1206                             ;3BH-3FH are unused
+  0040                1207     BLANK_TILE      EQU 40H ;010XXXXX: PICTURES
+  0041                1208     RADAR_TGT       EQU 41H
+  0042                1209     RADAR_HIT       EQU 42H
+  0043                1210     RADAR_MISSED    EQU 43H
+  0044                1211     OPEN_SEA        EQU 44H ;0 (Java MapMaker Tile ID)
+  0045                1212     LONE_SHIP_TILE  EQU 45H ;1
+  0046                1213     SHIP_EASTWARD   EQU 46H ;2
+  0047                1214     SHIP_NORTHWARD  EQU 47H ;3
+  0048                1215     SHIP_WESTWARD   EQU 48H ;4
+  0049                1216     SHIP_SOUTHWARD  EQU 49H ;5
+  004A                1217     SHIP_VERTICAL   EQU 4AH ;6
+  004B                1218     SHIP_HORIZONTAL EQU 4BH ;7
+  004C                1219     SHIP_JUNCTION   EQU 4CH ;8
+  004D                1220     CORNERS_TILE_I  EQU 4DH ;
+  004E                1221     HIT_SEA         EQU 4EH ; = OPEN_SEA + 10
+  004F                1222     HIT_SJIP_L      EQU 4FH
+  0050                1223     HIT_SHIP_E      EQU 50H
+  0051                1224     HIT_SHIP_N      EQU 51H
+  0052                1225     HIT_SHIP_W      EQU 52H
+  0053                1226     HIT_SHIP_S      EQU 53H
+  0054                1227     HIT_SHIP_V      EQU 54H
+  0055                1228     HIT_SHIP_H      EQU 55H
+  0056                1229     HIT_SHIP_J      EQU 56H ; = SHIP_JUNCTION +10
+  0057                1230     CORNERS_TILE_II EQU 57H
+  0058                1231     HIT_TWICE       EQU 58H ;If a tile ID equal to or larger than this is noted, a tile was hit twice.
+  0059                1232     CHECKERED_TILE  EQU 59H ;PIXELS: 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H (for reference)
+                      1233                             ; Other ID's until 7FH are not implemented and use no ROM.
+                      1234     ;  END OF TABLE  ;
+                      1235
+                      1236     ;=========================================================
+                      1237     ;TILE_LUT ;**Will be copied over from other file
+                      1238     DIGITS_SYMBOLS:
+05A0 0018242424       1239     DB  00H,  18H,    24H,  24H,    24H,  24H,    18H,  00H ; 0
+     241800
+05A8 0010101014       1240     DB  00H,  10H,    10H,  10H,    14H,  18H,    10H,  00H ; 1
+     181000
+05B0 007E040810       1241     DB  00H,  7EH,    04H,  08H,    10H,  20H,    1EH,  00H ; 2
+     201E00
+05B8 001C201C10       1242     DB  00H,  1CH,    20H,  1CH,    10H,  20H,    3CH,  00H ; 3
+     203C00
+05C0 0010103E14       1243     DB  00H,  10H,    10H,  3EH,    14H,  18H,    10H,  00H ; 4
+     181000
+05C8 000C10201C       1244     DB  00H,  0CH,    10H,  20H,    1CH,  04H,    7CH,  00H ; 5
+     047C00
+05D0 003C243C04       1245     DB  00H,  3CH,    24H,  3CH,    04H,  04H,    3CH,  00H ; 6
+     043C00
+05D8 0002040808       1246     DB  00H,  02H,    04H,  08H,    08H,  10H,    3EH,  00H ; 7
+     103E00
+05E0 001C221408       1247     DB  00H,  1CH,    22H,  14H,    08H,  24H,    18H,  00H ; 8
+     241800
+05E8 003C20203C       1248     DB  00H,  3CH,    20H,  20H,    3CH,  22H,    3CH,  00H ; 9
+     223C00
+                      1249
+05F0 0000000000       1250     DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ;(space)
+     000000
+05F8 0000000000       1251     DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; ?
+     000000
+0600 0000000000       1252     DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; !
+     000000
+0608 24247E2424       1253     DB  24H,  24H,    7EH,  24H,    24H,  7EH,    24H,  24H ; #
+     7E2424
+0610 007E000000       1254     DB  00H,  7EH,    00H,  00H,    00H,  00H,    00H,  00H ; _
+     000000
+0618 0000000066       1255     DB  00H,  00H,    00H,  00H,    66H,  66H,    66H,  00H ; "
+     666600
+0620 0000000080       1256     DB  00H,  00H,    00H,  00H,    80H,  80H,    80H,  00H ; '
+     808000
+0628 0000000000       1257     DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; *
+     000000
+                      1258
+                      1259     LETTERS:
+0630 FFFFFFFFFF       1260     DB 0FFH, 0FFH,   0FFH, 0FFH,   0FFH, 0FFH,   0FFH, 0FFH ; (BLANK ROW)
+     FFFFFF
+0638 0042427E42       1261     DB  00H,  42H,    42H,  7EH,    42H,  42H,    3CH,  00H ; A
+     423C00
+0640 0E12223E22       1262     DB  0EH,  12H,    22H,  3EH,    22H,  22H,    1EH,  00H ; B
+     221E00
+0648 007C020202       1263     DB  00H,  7CH,    02H,  02H,    02H,  04H,    78H,  00H ; C
+     047800
+0650 000E122222       1264     DB  00H,  0EH,    12H,  22H,    22H,  22H,    1EH,  00H ; D
+     221E00
+0658 007E02027E       1265     DB  00H,  7EH,    02H,  02H,    7EH,  02H,    7EH,  00H ; E
+     027E00
+0660 000202027E       1266     DB  00H,  02H,    02H,  02H,    7EH,  02H,    7EH,  00H ; F
+     027E00
+                      1267
+0668 007E427A02       1268     DB 00H,   7EH,    42H,  7AH,    02H,  02H,    7CH,  00H ; G
+     027C00
+0670 004242427E       1269     DB 00H,   42H,    42H,  42H,    7EH,  42H,    42H,  00H ; H
+     424200
+0678 001C080808       1270     DB 00H,   1CH,    08H,  08H,    08H,  08H,    1CH,  00H ; I
+     081C00
+0680 0055AA55AA       1271     DB 00H,   55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  00H ; J there is no j
+     55AA00
+0688 0055AA55AA       1272     DB 00H,   55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  00H ; K there is no k
+     55AA00
+0690 007E020202       1273     DB 00H,   7EH,    02H,  02H,    02H,  02H,    02H,  00H ; L
+     020200
+0698 004242526A       1274     DB 00H,   42H,    42H,  52H,    6AH,  66H,    42H,  00H ; M
+     664200
+                      1275
+06A0 002232322A       1276     DB 00H,   22H,    32H,  32H,    2AH,  26H,   22H,   00H ; N
+     262200
+06A8 001C224242       1277     DB 00H,   1CH,    22H,  42H,    42H,  22H,   3CH,   00H ; O
+     223C00
+06B0 0002023E42       1278     DB 00H,   02H,    02H,  3EH,    42H,  42H,   3EH,   00H ; P
+     423E00
+06B8 0055AA55AA       1279     DB 00H,   55H,   0AAH,  55H,   0AAH,  55H,  0AAH,   00H ; Q there is no q
+     55AA00
+06C0 0022120E12       1280     DB 00H,   22H,    12H,  0EH,    12H,  22H,   3EH,   00H ; R
+     223E00
+06C8 003C407804       1281     DB 00H,   3CH,    40H,  78H,    04H,  04H,   78H,   00H ; S
+     047800
+                      1282
+06D0 0008080808       1283     DB 00H,   08H,    08H,  08H,    08H,  08H,   3EH,   00H ; T
+     083E00
+06D8 003C424242       1284     DB 00H,   3CH,    42H,  42H,    42H,  42H,   42H,   00H ; U
+     424200
+06E0 0000AA55AA       1285     DB 00H,   00H,   0AAH,  55H,   0AAH,  55H,  0AAH,   00H ; V there is no v
+     55AA00
+06E8 0042665A42       1286     DB 00H,   42H,    66H,  5AH,    42H,  42H,   42H,   00H ; W
+     424200
+06F0 0055AA55AA       1287     DB 00H,   55H,   0AAH,  55H,   0AAH,  55H,  0AAH,   00H ; X there is no x
+     55AA00
+06F8 0008080808       1288     DB 00H,   08H,    08H,  08H,    08H,  14H,   22H,   00H ; Y
+     142200
+0700 0055AA55AA       1289     DB 00H,   55H,   0AAH,  55H,   0AAH,  55H,  0AAH,   00H ; Z there is no z
+     55AA00
+                      1290
+                      1291     PICTURES:
+0708 8100000000       1292     DB 081H,  00H,   000H,  00H,   000H,  00H,   000H,  81H ; BLANK
+     000081
+0710 0066421818       1293     DB  00H,  66H,    42H,  18H,    18H,  42H,    66H,  00H ; TGT
+     426600
+0718 42E7661818       1294     DB  42H, 0E7H,    66H,  18H,    18H,  66H,   0E7H,  42H ; HIT
+     66E742
+0720 0066420000       1295     DB  00H,  66H,    42H,  00H,    00H,  42H,    66H,  00H ; MISSED
+     426600
+                      1296
+0728 8100000000       1297     DB 081H,  00H,   000H,  00H,   000H,  00H,   000H,  81H ; SEA
+     000081
+0730 8100001818       1298     DB 081H,  00H,   000H,  18H,   018H,  00H,   000H,  81H ; L
+     000081
+0738 8100E0F8F8       1299     DB 081H,  00H,   0E0H, 0F8H,   0F8H, 0E0H,   000H,  81H ; E
+     E00081
+0740 8100001818       1300     DB 081H,  00H,    00H,  18H,    18H,  3CH,    3CH, 0BDH ; N
+     3C3CBD
+0748 8100071F1F       1301     DB 081H,  00H,    07H,  1FH,    1FH,  07H,    00H,  81H ; W
+     070081
+                      1302
+0750 BD3C3C1818       1303     DB 0BDH,  3CH,    3CH,  18H,    18H,  00H,    00H,  81H ; S
+     000081
+0758 BD3C3C3C3C       1304     DB 0BDH,  3CH,    3CH,  3CH,    3CH,  3CH,    3CH, 0BDH ; V
+     3C3CBD
+0760 8100FFFFFF       1305     DB 081H,  00H,   0FFH, 0FFH,   0FFH, 0FFH,    00H,  81H ; H
+     FF0081
+0768 AA55AA55AA       1306     DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; J*
+     55AA55
+0770 AA55AA55AA       1307     DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; C1*
+     55AA55
+                      1308
+0778 8118244242       1309     DB  81H,  18H,    24H,  42H,    42H,  24H,    18H,  81H ; HIT_SEA
+     241881
+0780 8100001818       1310     DB 081H,  00H,   000H,  18H,    18H,  00H,    00H, 0FFH ; L*
+     0000FF
+0788 810080B8F0       1311     DB  81H,  00H,    80H, 0B8H,   0F0H,  40H,    00H,  81H ; E
+     400081
+0790 8100000008       1312     DB  81H,  00H,    00H,  00H,    08H,  1CH,    38H,  9DH ; N
+     1C389D
+0798 8100050F1B       1313     DB  81H,  00H,    05H,  0FH,    1BH,  02H,    00H,  81H ; W
+     020081
+                      1314
+07A0 B91C380800       1315     DB 0B9H,  1CH,    38H,  08H,    00H,  00H,    00H,  81H ; S
+     000081
+07A8 BD1C30303C       1316     DB 0BDH,  1CH,    30H,  30H,    3CH,  1CH,    1CH, 0B5H ; V
+     1C1CB5
+07B0 8100CFDCFF       1317     DB  81H,  00H,   0CFH, 0DCH,   0FFH,  7BH,    00H,  81H ; H
+     7B0081
+07B8 AA55AA55AA       1318     DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; J*
+     55AA55
+07C0 AA55AA55AA       1319     DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; C2*
+     55AA55
+                      1320
+07C8 AA55FFFFFF       1321     DB 0AAH,  55H,   0FFH, 0FFH,   0FFH, 0FFH,   0AAH,  55H ; HIT_TWICE
+     FFAA55
+07D0 AA55AA55AA       1322     DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; CH
+     55AA55
+                      1323
+                      1324     ;  END OF TABLE  ;
+                      1325     END
+ASSEMBLY COMPLETE, NO ERRORS FOUND, NO WARNINGS
+
+
+SYMBOL TABLE:
+??MCU_8051_IDE . . . . . . . . . . .  N  NUMB  8051H  NOT USED
+??VERSION. . . . . . . . . . . . . .  N  NUMB  0149H  NOT USED
+AC . . . . . . . . . . . . . . . . .  B  ADDR  00D6H  NOT USED
+ACC. . . . . . . . . . . . . . . . .  D  ADDR  00E0H
+ACSR . . . . . . . . . . . . . . . .  D  ADDR  0097H  NOT USED
+ADCF . . . . . . . . . . . . . . . .  D  ADDR  00F6H  NOT USED
+ADCLK. . . . . . . . . . . . . . . .  D  ADDR  00F2H  NOT USED
+ADCON. . . . . . . . . . . . . . . .  D  ADDR  00F3H  NOT USED
+ADDH . . . . . . . . . . . . . . . .  D  ADDR  00F5H  NOT USED
+ADDL . . . . . . . . . . . . . . . .  D  ADDR  00F4H  NOT USED
+ADD_LOOP1. . . . . . . . . . . . . .  C  ADDR  032AH
+ADD_LOOP2. . . . . . . . . . . . . .  C  ADDR  0330H
+ANNOUNCE . . . . . . . . . . . . . .  C  ADDR  02D1H
+AUXR . . . . . . . . . . . . . . . .  D  ADDR  008EH  NOT USED
+AUXR1. . . . . . . . . . . . . . . .  D  ADDR  00A2H  NOT USED
+A_IS_ROW_MAPPER. . . . . . . . . . .  C  ADDR  014FH
+A_IS_TILE_ID . . . . . . . . . . . .  C  ADDR  014CH  NOT USED
+B. . . . . . . . . . . . . . . . . .  D  ADDR  00F0H
+BDRCON . . . . . . . . . . . . . . .  D  ADDR  009BH  NOT USED
+BDRCON_1 . . . . . . . . . . . . . .  D  ADDR  009CH  NOT USED
+BLANK_TILE . . . . . . . . . . . . .  N  NUMB  0040H
+BRL. . . . . . . . . . . . . . . . .  D  ADDR  009AH  NOT USED
+CCAP0H . . . . . . . . . . . . . . .  D  ADDR  00FAH  NOT USED
+CCAP0L . . . . . . . . . . . . . . .  D  ADDR  00EAH  NOT USED
+CCAP1H . . . . . . . . . . . . . . .  D  ADDR  00FBH  NOT USED
+CCAP1L . . . . . . . . . . . . . . .  D  ADDR  00EBH  NOT USED
+CCAP2H . . . . . . . . . . . . . . .  D  ADDR  00FCH  NOT USED
+CCAP3H . . . . . . . . . . . . . . .  D  ADDR  00FDH  NOT USED
+CCAP4H . . . . . . . . . . . . . . .  D  ADDR  00FEH  NOT USED
+CCAPL2H. . . . . . . . . . . . . . .  D  ADDR  00FCH  NOT USED
+CCAPL2L. . . . . . . . . . . . . . .  D  ADDR  00ECH  NOT USED
+CCAPL3H. . . . . . . . . . . . . . .  D  ADDR  00FDH  NOT USED
+CCAPL3L. . . . . . . . . . . . . . .  D  ADDR  00EDH  NOT USED
+CCAPL4H. . . . . . . . . . . . . . .  D  ADDR  00FEH  NOT USED
+CCAPL4L. . . . . . . . . . . . . . .  D  ADDR  00EEH  NOT USED
+CCAPM0 . . . . . . . . . . . . . . .  D  ADDR  00DAH  NOT USED
+CCAPM1 . . . . . . . . . . . . . . .  D  ADDR  00DBH  NOT USED
+CCAPM2 . . . . . . . . . . . . . . .  D  ADDR  00DCH  NOT USED
+CCAPM3 . . . . . . . . . . . . . . .  D  ADDR  00DDH  NOT USED
+CCAPM4 . . . . . . . . . . . . . . .  D  ADDR  00DEH  NOT USED
+CCF0 . . . . . . . . . . . . . . . .  B  ADDR  00D8H  NOT USED
+CCF1 . . . . . . . . . . . . . . . .  B  ADDR  00D9H  NOT USED
+CCF2 . . . . . . . . . . . . . . . .  B  ADDR  00DAH  NOT USED
+CCF3 . . . . . . . . . . . . . . . .  B  ADDR  00DBH  NOT USED
+CCF4 . . . . . . . . . . . . . . . .  B  ADDR  00DCH  NOT USED
+CCON . . . . . . . . . . . . . . . .  D  ADDR  00D8H  NOT USED
+CFINT. . . . . . . . . . . . . . . .  C  ADDR  0033H  NOT USED
+CH . . . . . . . . . . . . . . . . .  D  ADDR  00F9H  NOT USED
+CHAR_0 . . . . . . . . . . . . . . .  N  NUMB  0000H  NOT USED
+CHAR_1 . . . . . . . . . . . . . . .  N  NUMB  0001H
+CHAR_2 . . . . . . . . . . . . . . .  N  NUMB  0002H
+CHAR_3 . . . . . . . . . . . . . . .  N  NUMB  0003H
+CHAR_4 . . . . . . . . . . . . . . .  N  NUMB  0004H
+CHAR_5 . . . . . . . . . . . . . . .  N  NUMB  0005H
+CHAR_6 . . . . . . . . . . . . . . .  N  NUMB  0006H
+CHAR_7 . . . . . . . . . . . . . . .  N  NUMB  0007H
+CHAR_8 . . . . . . . . . . . . . . .  N  NUMB  0008H  NOT USED
+CHAR_9 . . . . . . . . . . . . . . .  N  NUMB  0009H
+CHAR_A . . . . . . . . . . . . . . .  N  NUMB  0021H
+CHAR_APOSTROPHE. . . . . . . . . . .  N  NUMB  0010H  NOT USED
+CHAR_ASTERISK. . . . . . . . . . . .  N  NUMB  0011H  NOT USED
+CHAR_B . . . . . . . . . . . . . . .  N  NUMB  0022H
+CHAR_C . . . . . . . . . . . . . . .  N  NUMB  0023H
+CHAR_D . . . . . . . . . . . . . . .  N  NUMB  0024H
+CHAR_E . . . . . . . . . . . . . . .  N  NUMB  0025H
+CHAR_EXCL_MARK . . . . . . . . . . .  N  NUMB  000CH  NOT USED
+CHAR_F . . . . . . . . . . . . . . .  N  NUMB  0026H
+CHAR_G . . . . . . . . . . . . . . .  N  NUMB  0027H
+CHAR_H . . . . . . . . . . . . . . .  N  NUMB  0028H  NOT USED
+CHAR_I . . . . . . . . . . . . . . .  N  NUMB  0029H
+CHAR_J . . . . . . . . . . . . . . .  N  NUMB  002AH  NOT USED
+CHAR_K . . . . . . . . . . . . . . .  N  NUMB  002BH  NOT USED
+CHAR_L . . . . . . . . . . . . . . .  N  NUMB  002CH  NOT USED
+CHAR_M . . . . . . . . . . . . . . .  N  NUMB  002DH
+CHAR_N . . . . . . . . . . . . . . .  N  NUMB  002EH
+CHAR_O . . . . . . . . . . . . . . .  N  NUMB  002FH
+CHAR_P . . . . . . . . . . . . . . .  N  NUMB  0030H
+CHAR_POUND_SIGN. . . . . . . . . . .  N  NUMB  000DH
+CHAR_Q . . . . . . . . . . . . . . .  N  NUMB  0031H  NOT USED
+CHAR_Q_MARK. . . . . . . . . . . . .  N  NUMB  000BH
+CHAR_R . . . . . . . . . . . . . . .  N  NUMB  0032H
+CHAR_S . . . . . . . . . . . . . . .  N  NUMB  0033H
+CHAR_SPACE . . . . . . . . . . . . .  N  NUMB  000AH
+CHAR_SPCH_MARKS. . . . . . . . . . .  N  NUMB  000FH
+CHAR_T . . . . . . . . . . . . . . .  N  NUMB  0034H
+CHAR_U . . . . . . . . . . . . . . .  N  NUMB  0035H
+CHAR_UNDERSCORE. . . . . . . . . . .  N  NUMB  000EH
+CHAR_V . . . . . . . . . . . . . . .  N  NUMB  0036H  NOT USED
+CHAR_W . . . . . . . . . . . . . . .  N  NUMB  0037H
+CHAR_X . . . . . . . . . . . . . . .  N  NUMB  0038H  NOT USED
+CHAR_Y . . . . . . . . . . . . . . .  N  NUMB  0039H  NOT USED
+CHAR_Z . . . . . . . . . . . . . . .  N  NUMB  003AH  NOT USED
+CHECKERED_TILE . . . . . . . . . . .  N  NUMB  0059H  NOT USED
+CKCON. . . . . . . . . . . . . . . .  D  ADDR  008FH  NOT USED
+CKCON0 . . . . . . . . . . . . . . .  D  ADDR  008FH  NOT USED
+CKRL . . . . . . . . . . . . . . . .  D  ADDR  0097H  NOT USED
+CKSEL. . . . . . . . . . . . . . . .  D  ADDR  0085H  NOT USED
+CL . . . . . . . . . . . . . . . . .  D  ADDR  00E9H  NOT USED
+CLEAR_LOOP . . . . . . . . . . . . .  C  ADDR  0007H
+CLKREG . . . . . . . . . . . . . . .  D  ADDR  008FH  NOT USED
+CLOCK. . . . . . . . . . . . . . . .  C  ADDR  058CH
+CMOD . . . . . . . . . . . . . . . .  D  ADDR  00D9H  NOT USED
+COL2 . . . . . . . . . . . . . . . .  C  ADDR  015BH
+COL3 . . . . . . . . . . . . . . . .  C  ADDR  0162H
+COL4 . . . . . . . . . . . . . . . .  C  ADDR  0169H
+COL5 . . . . . . . . . . . . . . . .  C  ADDR  0170H
+COL6 . . . . . . . . . . . . . . . .  C  ADDR  0177H
+COL7 . . . . . . . . . . . . . . . .  C  ADDR  017EH
+COL_LOOP . . . . . . . . . . . . . .  C  ADDR  0388H
+CONFIGURE_LCD. . . . . . . . . . . .  C  ADDR  04A1H
+CORNERS_TILE_I . . . . . . . . . . .  N  NUMB  004DH  NOT USED
+CORNERS_TILE_II. . . . . . . . . . .  N  NUMB  0057H  NOT USED
+CPRL2. . . . . . . . . . . . . . . .  B  ADDR  00C8H  NOT USED
+CR . . . . . . . . . . . . . . . . .  B  ADDR  00DEH  NOT USED
+CS_1 . . . . . . . . . . . . . . . .  N  NUMB  00B4H
+CS_2 . . . . . . . . . . . . . . . .  N  NUMB  00B3H
+CT2. . . . . . . . . . . . . . . . .  B  ADDR  00C9H  NOT USED
+CTR_I. . . . . . . . . . . . . . . .  N  NUMB  0007H
+CTR_II . . . . . . . . . . . . . . .  N  NUMB  0006H  NOT USED
+CTR_III. . . . . . . . . . . . . . .  N  NUMB  0005H  NOT USED
+CY . . . . . . . . . . . . . . . . .  B  ADDR  00D7H  NOT USED
+DELAY. . . . . . . . . . . . . . . .  C  ADDR  0490H
+DELAY1 . . . . . . . . . . . . . . .  C  ADDR  00B6H
+DELAY_OUTER_LOOP . . . . . . . . . .  C  ADDR  0496H
+DIGITS_SYMBOLS . . . . . . . . . . .  C  ADDR  05A0H
+DIGIT_SYMBOL_ID. . . . . . . . . . .  C  ADDR  0365H  NOT USED
+DP0H . . . . . . . . . . . . . . . .  D  ADDR  0083H  NOT USED
+DP0L . . . . . . . . . . . . . . . .  D  ADDR  0082H  NOT USED
+DP1H . . . . . . . . . . . . . . . .  D  ADDR  0085H  NOT USED
+DP1L . . . . . . . . . . . . . . . .  D  ADDR  0084H  NOT USED
+DPH. . . . . . . . . . . . . . . . .  D  ADDR  0083H  NOT USED
+DPL. . . . . . . . . . . . . . . . .  D  ADDR  0082H  NOT USED
+EA . . . . . . . . . . . . . . . . .  B  ADDR  00AFH  NOT USED
+EC . . . . . . . . . . . . . . . . .  B  ADDR  00AEH  NOT USED
+EECON. . . . . . . . . . . . . . . .  D  ADDR  0096H  NOT USED
+EEPROM_ALT . . . . . . . . . . . . .  C  ADDR  00E8H
+EEPROM_BUFF. . . . . . . . . . . . .  N  NUMB  003BH
+EEPROM_DATA. . . . . . . . . . . . .  N  NUMB  0039H
+EEPROM_DELAY . . . . . . . . . . . .  C  ADDR  0593H
+EEPROM_DELAY_1 . . . . . . . . . . .  C  ADDR  0596H
+EEPROM_PAGE_NO . . . . . . . . . . .  N  NUMB  003AH
+EEPROM_SCL_PIN . . . . . . . . . . .  N  NUMB  00A4H
+EEPROM_SDA_PIN . . . . . . . . . . .  N  NUMB  00A5H
+EEPROM_START . . . . . . . . . . . .  C  ADDR  053CH
+EEPROM_STOP. . . . . . . . . . . . .  C  ADDR  0549H
+ENABLE . . . . . . . . . . . . . . .  N  NUMB  00B5H
+END_OF_PROPAGATION . . . . . . . . .  C  ADDR  0381H
+END_P1_WIN . . . . . . . . . . . . .  C  ADDR  02C9H
+END_P2_WIN . . . . . . . . . . . . .  C  ADDR  02CDH
+END_ROW. . . . . . . . . . . . . . .  C  ADDR  0185H
+ENTER1 . . . . . . . . . . . . . . .  C  ADDR  0070H
+ENTER2 . . . . . . . . . . . . . . .  C  ADDR  0092H
+ENTER3 . . . . . . . . . . . . . . .  C  ADDR  0226H
+ENTER4 . . . . . . . . . . . . . . .  C  ADDR  023EH  NOT USED
+ENTER5 . . . . . . . . . . . . . . .  C  ADDR  0251H  NOT USED
+ENTER6 . . . . . . . . . . . . . . .  C  ADDR  02BAH
+ES . . . . . . . . . . . . . . . . .  B  ADDR  00ACH  NOT USED
+ET0. . . . . . . . . . . . . . . . .  B  ADDR  00A9H  NOT USED
+ET1. . . . . . . . . . . . . . . . .  B  ADDR  00ABH  NOT USED
+ET2. . . . . . . . . . . . . . . . .  B  ADDR  00ADH  NOT USED
+EX0. . . . . . . . . . . . . . . . .  B  ADDR  00A8H  NOT USED
+EX1. . . . . . . . . . . . . . . . .  B  ADDR  00AAH  NOT USED
+EXEN2. . . . . . . . . . . . . . . .  B  ADDR  00CBH  NOT USED
+EXF2 . . . . . . . . . . . . . . . .  B  ADDR  00CEH  NOT USED
+EXTI0. . . . . . . . . . . . . . . .  C  ADDR  0003H  NOT USED
+EXTI1. . . . . . . . . . . . . . . .  C  ADDR  0013H  NOT USED
+F0 . . . . . . . . . . . . . . . . .  B  ADDR  00D5H  NOT USED
+FE . . . . . . . . . . . . . . . . .  B  ADDR  009FH  NOT USED
+FILLER . . . . . . . . . . . . . . .  C  ADDR  0339H
+FILLER_SHORTCUT. . . . . . . . . . .  B  ADDR  007CH
+FILL_LOOP. . . . . . . . . . . . . .  C  ADDR  033CH  NOT USED
+FILL_MAP . . . . . . . . . . . . . .  C  ADDR  0335H
+GET. . . . . . . . . . . . . . . . .  C  ADDR  0578H
+GET_DATA . . . . . . . . . . . . . .  C  ADDR  0572H
+GET_PIXELS . . . . . . . . . . . . .  C  ADDR  0352H
+HITS_TO_WIN. . . . . . . . . . . . .  N  NUMB  0004H
+HIT_SEA. . . . . . . . . . . . . . .  N  NUMB  004EH
+HIT_SHIP_E . . . . . . . . . . . . .  N  NUMB  0050H  NOT USED
+HIT_SHIP_H . . . . . . . . . . . . .  N  NUMB  0055H  NOT USED
+HIT_SHIP_J . . . . . . . . . . . . .  N  NUMB  0056H  NOT USED
+HIT_SHIP_N . . . . . . . . . . . . .  N  NUMB  0051H  NOT USED
+HIT_SHIP_S . . . . . . . . . . . . .  N  NUMB  0053H  NOT USED
+HIT_SHIP_V . . . . . . . . . . . . .  N  NUMB  0054H  NOT USED
+HIT_SHIP_W . . . . . . . . . . . . .  N  NUMB  0052H  NOT USED
+HIT_SJIP_L . . . . . . . . . . . . .  N  NUMB  004FH  NOT USED
+HIT_TWICE. . . . . . . . . . . . . .  N  NUMB  0058H
+HOR. . . . . . . . . . . . . . . . .  C  ADDR  04C2H
+IE . . . . . . . . . . . . . . . . .  D  ADDR  00A8H  NOT USED
+IE0. . . . . . . . . . . . . . . . .  B  ADDR  0089H  NOT USED
+IE1. . . . . . . . . . . . . . . . .  B  ADDR  008BH  NOT USED
+INPUT_DONE_I . . . . . . . . . . . .  C  ADDR  0251H
+INPUT_DONE_II. . . . . . . . . . . .  C  ADDR  0264H
+INPUT_I. . . . . . . . . . . . . . .  N  NUMB  0034H
+INPUT_II . . . . . . . . . . . . . .  N  NUMB  0035H
+INT0 . . . . . . . . . . . . . . . .  B  ADDR  00B2H  NOT USED
+INT1 . . . . . . . . . . . . . . . .  B  ADDR  00B3H  NOT USED
+IP . . . . . . . . . . . . . . . . .  D  ADDR  00B8H  NOT USED
+IPH. . . . . . . . . . . . . . . . .  D  ADDR  00B7H  NOT USED
+IPH0 . . . . . . . . . . . . . . . .  D  ADDR  00B7H  NOT USED
+IPH1 . . . . . . . . . . . . . . . .  D  ADDR  00B3H  NOT USED
+IPL0 . . . . . . . . . . . . . . . .  D  ADDR  00B8H  NOT USED
+IPL1 . . . . . . . . . . . . . . . .  D  ADDR  00B2H  NOT USED
+IS_ID. . . . . . . . . . . . . . . .  C  ADDR  035FH
+IT0. . . . . . . . . . . . . . . . .  B  ADDR  0088H  NOT USED
+IT1. . . . . . . . . . . . . . . . .  B  ADDR  008AH  NOT USED
+K1 . . . . . . . . . . . . . . . . .  C  ADDR  041AH
+K2 . . . . . . . . . . . . . . . . .  C  ADDR  0424H
+KBE. . . . . . . . . . . . . . . . .  D  ADDR  009DH  NOT USED
+KBF. . . . . . . . . . . . . . . . .  D  ADDR  009EH  NOT USED
+KBLS . . . . . . . . . . . . . . . .  D  ADDR  009CH  NOT USED
+KB_FIND. . . . . . . . . . . . . . .  C  ADDR  0477H
+KB_MATCH . . . . . . . . . . . . . .  C  ADDR  047DH
+KB_OVER. . . . . . . . . . . . . . .  C  ADDR  042FH
+KB_OVER1 . . . . . . . . . . . . . .  C  ADDR  043AH
+KCODE0 . . . . . . . . . . . . . . .  C  ADDR  0480H
+KCODE1 . . . . . . . . . . . . . . .  C  ADDR  0484H
+KCODE2 . . . . . . . . . . . . . . .  C  ADDR  0488H
+KCODE3 . . . . . . . . . . . . . . .  C  ADDR  048CH
+KEYBOARD . . . . . . . . . . . . . .  C  ADDR  0417H
+LCD_COUNTER_1. . . . . . . . . . . .  N  NUMB  0004H
+LCD_COUNTER_2. . . . . . . . . . . .  N  NUMB  0003H  NOT USED
+LCD_LOOP . . . . . . . . . . . . . .  C  ADDR  03E0H
+LCD_LOOP_2 . . . . . . . . . . . . .  C  ADDR  0408H
+LCD_PORT . . . . . . . . . . . . . .  N  NUMB  0090H
+LCD_RESET. . . . . . . . . . . . . .  N  NUMB  00B2H
+LETTERS. . . . . . . . . . . . . . .  C  ADDR  0630H
+LETTER_ID. . . . . . . . . . . . . .  C  ADDR  036AH
+LOAD_MAP . . . . . . . . . . . . . .  C  ADDR  00E8H  NOT USED
+LOAD_TILE. . . . . . . . . . . . . .  C  ADDR  018DH
+LONE_SHIP_TILE . . . . . . . . . . .  N  NUMB  0045H  NOT USED
+MAIN_GAME. . . . . . . . . . . . . .  C  ADDR  01AEH
+MAP_2_LOADED . . . . . . . . . . . .  C  ADDR  01A1H
+MAP_LOADED . . . . . . . . . . . . .  C  ADDR  0199H
+MAP_NO . . . . . . . . . . . . . . .  N  NUMB  0030H
+MAP_SETUP. . . . . . . . . . . . . .  C  ADDR  000DH
+MEMORY_ADDRESS1. . . . . . . . . . .  N  NUMB  0038H
+MOVE_TO_NEXT . . . . . . . . . . . .  C  ADDR  03B2H
+NEXT_1 . . . . . . . . . . . . . . .  C  ADDR  0315H
+NEXT_2 . . . . . . . . . . . . . . .  C  ADDR  0320H
+NEXT_3 . . . . . . . . . . . . . . .  C  ADDR  03D8H
+NEXT_4 . . . . . . . . . . . . . . .  C  ADDR  0400H
+NEXT_BYTE. . . . . . . . . . . . . .  C  ADDR  034AH
+NEXT_MAP_CODE_BYTE . . . . . . . . .  C  ADDR  0147H
+NOT_HIT. . . . . . . . . . . . . . .  C  ADDR  03ADH
+NOT_MISS . . . . . . . . . . . . . .  C  ADDR  039FH
+OPEN_SEA . . . . . . . . . . . . . .  N  NUMB  0044H
+OSCCON . . . . . . . . . . . . . . .  D  ADDR  0086H  NOT USED
+OV . . . . . . . . . . . . . . . . .  B  ADDR  00D2H  NOT USED
+P. . . . . . . . . . . . . . . . . .  B  ADDR  00D0H  NOT USED
+P0 . . . . . . . . . . . . . . . . .  D  ADDR  0080H
+P1 . . . . . . . . . . . . . . . . .  D  ADDR  0090H  NOT USED
+P1M1 . . . . . . . . . . . . . . . .  D  ADDR  00D4H  NOT USED
+P1M2 . . . . . . . . . . . . . . . .  D  ADDR  00E2H  NOT USED
+P1_MAP_END . . . . . . . . . . . . .  N  NUMB  007FH
+P1_MAP_START . . . . . . . . . . . .  N  NUMB  0040H
+P1_P2. . . . . . . . . . . . . . . .  B  ADDR  007FH
+P1_SHIPS_LEFT. . . . . . . . . . . .  N  NUMB  0036H
+P1_WAS_HIT . . . . . . . . . . . . .  C  ADDR  02B4H
+P2 . . . . . . . . . . . . . . . . .  D  ADDR  00A0H
+P2_MAP_END . . . . . . . . . . . . .  N  NUMB  00BFH
+P2_MAP_START . . . . . . . . . . . .  N  NUMB  0080H
+P2_SHIPS_LEFT. . . . . . . . . . . .  N  NUMB  0037H
+P2_WAS_HIT . . . . . . . . . . . . .  C  ADDR  02B0H  NOT USED
+P3 . . . . . . . . . . . . . . . . .  D  ADDR  00B0H  NOT USED
+P3M1 . . . . . . . . . . . . . . . .  D  ADDR  00D5H  NOT USED
+P3M2 . . . . . . . . . . . . . . . .  D  ADDR  00E3H  NOT USED
+P4 . . . . . . . . . . . . . . . . .  D  ADDR  00C0H  NOT USED
+P4M1 . . . . . . . . . . . . . . . .  D  ADDR  00D6H  NOT USED
+P4M2 . . . . . . . . . . . . . . . .  D  ADDR  00E4H  NOT USED
+P5 . . . . . . . . . . . . . . . . .  D  ADDR  00E8H  NOT USED
+PC . . . . . . . . . . . . . . . . .  B  ADDR  00BEH  NOT USED
+PCON . . . . . . . . . . . . . . . .  D  ADDR  0087H  NOT USED
+PICTURES . . . . . . . . . . . . . .  C  ADDR  0708H
+PICTURE_ID . . . . . . . . . . . . .  C  ADDR  036FH
+PPCL . . . . . . . . . . . . . . . .  B  ADDR  00BEH  NOT USED
+PROPAGATE. . . . . . . . . . . . . .  C  ADDR  0376H
+PS . . . . . . . . . . . . . . . . .  B  ADDR  00BCH  NOT USED
+PSL. . . . . . . . . . . . . . . . .  B  ADDR  00BCH  NOT USED
+PSW. . . . . . . . . . . . . . . . .  D  ADDR  00D0H  NOT USED
+PT0. . . . . . . . . . . . . . . . .  B  ADDR  00B9H  NOT USED
+PT0L . . . . . . . . . . . . . . . .  B  ADDR  00B9H  NOT USED
+PT1. . . . . . . . . . . . . . . . .  B  ADDR  00BBH  NOT USED
+PT1L . . . . . . . . . . . . . . . .  B  ADDR  00BBH  NOT USED
+PT2. . . . . . . . . . . . . . . . .  B  ADDR  00BDH  NOT USED
+PT2L . . . . . . . . . . . . . . . .  B  ADDR  00BDH  NOT USED
+PX0. . . . . . . . . . . . . . . . .  B  ADDR  00B8H  NOT USED
+PX0L . . . . . . . . . . . . . . . .  B  ADDR  00B8H  NOT USED
+PX1. . . . . . . . . . . . . . . . .  B  ADDR  00BAH  NOT USED
+PX1L . . . . . . . . . . . . . . . .  B  ADDR  00BAH  NOT USED
+RADAR. . . . . . . . . . . . . . . .  B  ADDR  007EH
+RADAR_HIT. . . . . . . . . . . . . .  N  NUMB  0042H
+RADAR_MISSED . . . . . . . . . . . .  N  NUMB  0043H
+RADAR_MODE . . . . . . . . . . . . .  C  ADDR  038FH
+RADAR_TGT. . . . . . . . . . . . . .  N  NUMB  0041H
+RB8. . . . . . . . . . . . . . . . .  B  ADDR  009AH  NOT USED
+RCAP2H . . . . . . . . . . . . . . .  D  ADDR  00CBH  NOT USED
+RCAP2L . . . . . . . . . . . . . . .  D  ADDR  00CAH  NOT USED
+RCLK . . . . . . . . . . . . . . . .  B  ADDR  00CDH  NOT USED
+RD . . . . . . . . . . . . . . . . .  B  ADDR  00B7H  NOT USED
+RD_WR. . . . . . . . . . . . . . . .  N  NUMB  00B6H
+READ_DATA. . . . . . . . . . . . . .  C  ADDR  0514H
+READ_LOOP. . . . . . . . . . . . . .  C  ADDR  00DAH
+RECEIVE_INPUT. . . . . . . . . . . .  C  ADDR  0238H
+REN. . . . . . . . . . . . . . . . .  B  ADDR  009CH  NOT USED
+RESET. . . . . . . . . . . . . . . .  C  ADDR  0000H  NOT USED
+RI . . . . . . . . . . . . . . . . .  B  ADDR  0098H  NOT USED
+ROW_0. . . . . . . . . . . . . . . .  C  ADDR  0465H
+ROW_1. . . . . . . . . . . . . . . .  C  ADDR  046AH
+ROW_2. . . . . . . . . . . . . . . .  C  ADDR  046FH
+ROW_3. . . . . . . . . . . . . . . .  C  ADDR  0474H
+RS . . . . . . . . . . . . . . . . .  N  NUMB  00B7H
+RS0. . . . . . . . . . . . . . . . .  B  ADDR  00D3H  NOT USED
+RS1. . . . . . . . . . . . . . . . .  B  ADDR  00D4H  NOT USED
+RXD. . . . . . . . . . . . . . . . .  B  ADDR  00B0H  NOT USED
+SADDR. . . . . . . . . . . . . . . .  D  ADDR  00A9H  NOT USED
+SADDR_0. . . . . . . . . . . . . . .  D  ADDR  00A9H  NOT USED
+SADDR_1. . . . . . . . . . . . . . .  D  ADDR  00AAH  NOT USED
+SADEN. . . . . . . . . . . . . . . .  D  ADDR  00B9H  NOT USED
+SADEN_0. . . . . . . . . . . . . . .  D  ADDR  00B9H  NOT USED
+SADEN_1. . . . . . . . . . . . . . .  D  ADDR  00BAH  NOT USED
+SBUF . . . . . . . . . . . . . . . .  D  ADDR  0099H  NOT USED
+SCON . . . . . . . . . . . . . . . .  D  ADDR  0098H  NOT USED
+SELECT_TILE. . . . . . . . . . . . .  C  ADDR  0307H
+SEND . . . . . . . . . . . . . . . .  C  ADDR  055AH
+SEND_BYTE. . . . . . . . . . . . . .  C  ADDR  04E9H
+SEND_CMD . . . . . . . . . . . . . .  C  ADDR  04DCH
+SEND_DATA. . . . . . . . . . . . . .  C  ADDR  0556H
+SHIP_EASTWARD. . . . . . . . . . . .  N  NUMB  0046H  NOT USED
+SHIP_HORIZONTAL. . . . . . . . . . .  N  NUMB  004BH  NOT USED
+SHIP_JUNCTION. . . . . . . . . . . .  N  NUMB  004CH  NOT USED
+SHIP_NORTHWARD . . . . . . . . . . .  N  NUMB  0047H  NOT USED
+SHIP_SOUTHWARD . . . . . . . . . . .  N  NUMB  0049H  NOT USED
+SHIP_VERTICAL. . . . . . . . . . . .  N  NUMB  004AH  NOT USED
+SHIP_WESTWARD. . . . . . . . . . . .  N  NUMB  0048H  NOT USED
+SIMUL. . . . . . . . . . . . . . . .  B  ADDR  007BH
+SINT . . . . . . . . . . . . . . . .  C  ADDR  0023H  NOT USED
+SKIP00 . . . . . . . . . . . . . . .  C  ADDR  0077H
+SKIP01 . . . . . . . . . . . . . . .  C  ADDR  0099H
+SKIP03 . . . . . . . . . . . . . . .  C  ADDR  0245H
+SKIP04 . . . . . . . . . . . . . . .  C  ADDR  0258H
+SKIP1. . . . . . . . . . . . . . . .  C  ADDR  0030H
+SKIP10 . . . . . . . . . . . . . . .  C  ADDR  02ADH
+SKIP11 . . . . . . . . . . . . . . .  C  ADDR  02B6H
+SKIP12 . . . . . . . . . . . . . . .  C  ADDR  02EEH
+SKIP2. . . . . . . . . . . . . . . .  C  ADDR  00F4H
+SKIP3. . . . . . . . . . . . . . . .  C  ADDR  00FDH
+SKIP4. . . . . . . . . . . . . . . .  C  ADDR  011BH
+SKIP5. . . . . . . . . . . . . . . .  C  ADDR  0234H
+SKIP6. . . . . . . . . . . . . . . .  C  ADDR  026BH
+SKIP7. . . . . . . . . . . . . . . .  C  ADDR  0272H
+SKIP77 . . . . . . . . . . . . . . .  C  ADDR  01CAH
+SKIP8. . . . . . . . . . . . . . . .  C  ADDR  0291H
+SKIP_CHIP_2. . . . . . . . . . . . .  C  ADDR  0416H
+SKIP_CORRECTION. . . . . . . . . . .  C  ADDR  02A7H
+SM0. . . . . . . . . . . . . . . . .  B  ADDR  009FH  NOT USED
+SM1. . . . . . . . . . . . . . . . .  B  ADDR  009EH  NOT USED
+SM2. . . . . . . . . . . . . . . . .  B  ADDR  009DH  NOT USED
+SP . . . . . . . . . . . . . . . . .  D  ADDR  0081H  NOT USED
+SPCON. . . . . . . . . . . . . . . .  D  ADDR  00C3H  NOT USED
+SPCR . . . . . . . . . . . . . . . .  D  ADDR  00D5H  NOT USED
+SPDAT. . . . . . . . . . . . . . . .  D  ADDR  00C5H  NOT USED
+SPDR . . . . . . . . . . . . . . . .  D  ADDR  0086H  NOT USED
+SPSR . . . . . . . . . . . . . . . .  D  ADDR  00AAH  NOT USED
+SPSTA. . . . . . . . . . . . . . . .  D  ADDR  00C4H  NOT USED
+SS1. . . . . . . . . . . . . . . . .  C  ADDR  0013H
+STARTED. . . . . . . . . . . . . . .  C  ADDR  0324H
+T0 . . . . . . . . . . . . . . . . .  B  ADDR  00B4H  NOT USED
+T1 . . . . . . . . . . . . . . . . .  B  ADDR  00B5H  NOT USED
+T2CON. . . . . . . . . . . . . . . .  D  ADDR  00C8H  NOT USED
+T2MOD. . . . . . . . . . . . . . . .  D  ADDR  00C9H  NOT USED
+TB8. . . . . . . . . . . . . . . . .  B  ADDR  009BH  NOT USED
+TBL_FOUND. . . . . . . . . . . . . .  C  ADDR  0372H
+TCLK . . . . . . . . . . . . . . . .  B  ADDR  00CCH  NOT USED
+TCON . . . . . . . . . . . . . . . .  D  ADDR  0088H  NOT USED
+TEXT . . . . . . . . . . . . . . . .  B  ADDR  007DH
+TEXT_SCR_MAP_END . . . . . . . . . .  N  NUMB  00FFH
+TEXT_SCR_MAP_START . . . . . . . . .  N  NUMB  00C0H
+TF0. . . . . . . . . . . . . . . . .  B  ADDR  008DH
+TF1. . . . . . . . . . . . . . . . .  B  ADDR  008FH  NOT USED
+TF2. . . . . . . . . . . . . . . . .  B  ADDR  00CFH  NOT USED
+TH0. . . . . . . . . . . . . . . . .  D  ADDR  008CH
+TH1. . . . . . . . . . . . . . . . .  D  ADDR  008DH  NOT USED
+TH2. . . . . . . . . . . . . . . . .  D  ADDR  00CDH  NOT USED
+TI . . . . . . . . . . . . . . . . .  B  ADDR  0099H  NOT USED
+TILE_COL . . . . . . . . . . . . . .  N  NUMB  0032H
+TILE_ID. . . . . . . . . . . . . . .  N  NUMB  0033H
+TILE_ROW . . . . . . . . . . . . . .  N  NUMB  0031H
+TIMER0 . . . . . . . . . . . . . . .  C  ADDR  000BH  NOT USED
+TIMER1 . . . . . . . . . . . . . . .  C  ADDR  001BH  NOT USED
+TIMER2 . . . . . . . . . . . . . . .  C  ADDR  002BH  NOT USED
+TL0. . . . . . . . . . . . . . . . .  D  ADDR  008AH
+TL1. . . . . . . . . . . . . . . . .  D  ADDR  008BH  NOT USED
+TL2. . . . . . . . . . . . . . . . .  D  ADDR  00CCH  NOT USED
+TMOD . . . . . . . . . . . . . . . .  D  ADDR  0089H
+TO_INPUT_II. . . . . . . . . . . . .  C  ADDR  024FH
+TO_INPUT_II_ . . . . . . . . . . . .  C  ADDR  0262H
+TR0. . . . . . . . . . . . . . . . .  B  ADDR  008CH
+TR1. . . . . . . . . . . . . . . . .  B  ADDR  008EH  NOT USED
+TR2. . . . . . . . . . . . . . . . .  B  ADDR  00CAH  NOT USED
+TXD. . . . . . . . . . . . . . . . .  B  ADDR  00B1H  NOT USED
+UPDATE_LCD_ALL . . . . . . . . . . .  C  ADDR  03C1H
+UPDATE_LCD_COL . . . . . . . . . . .  C  ADDR  0383H
+VER. . . . . . . . . . . . . . . . .  C  ADDR  04BFH
+WDTCON . . . . . . . . . . . . . . .  D  ADDR  00A7H  NOT USED
+WDTPRG . . . . . . . . . . . . . . .  D  ADDR  00A7H  NOT USED
+WDTRST . . . . . . . . . . . . . . .  D  ADDR  00A6H  NOT USED
+WR . . . . . . . . . . . . . . . . .  B  ADDR  00B6H  NOT USED
+WRITE_DATA . . . . . . . . . . . . .  C  ADDR  04F6H  NOT USED
+WRITE_TILE . . . . . . . . . . . . .  C  ADDR  0346H

@@ -1,0 +1,156 @@
+; ;;TILE_ID_TABLE;; ;
+CHAR_0          EQU 00H ;000XXXXX: DIGITS & SYMBOLS
+CHAR_1          EQU 01H
+CHAR_2          EQU 02H
+CHAR_3          EQU 03H
+CHAR_4          EQU 04H
+CHAR_5          EQU 05H
+CHAR_6          EQU 06H
+CHAR_7          EQU 07H
+CHAR_8          EQU 08H
+CHAR_9          EQU 09H
+CHAR_SPACE      EQU 0AH
+CHAR_Q_MARK     EQU 0BH
+CHAR_EXCL_MARK  EQU 0CH
+CHAR_POUND_SIGN EQU 0DH
+CHAR_UNDERSCORE EQU 0EH
+CHAR_SPCH_MARKS EQU 0FH
+			;10H-20H are unused
+CHAR_A          EQU 21H ;001XXXXX: LETTERS
+CHAR_B          EQU 22H
+CHAR_C          EQU 23H
+CHAR_D          EQU 24H
+CHAR_E          EQU 25H
+CHAR_F          EQU 26H
+CHAR_G          EQU 27H
+CHAR_H          EQU 28H
+CHAR_I          EQU 29H
+CHAR_J          EQU 2AH
+CHAR_K          EQU 2BH
+CHAR_L          EQU 2CH
+CHAR_M          EQU 2DH
+CHAR_N          EQU 2EH
+CHAR_O          EQU 2FH
+CHAR_P          EQU 30H
+CHAR_Q          EQU 31H
+CHAR_R          EQU 32H
+CHAR_S          EQU 33H
+CHAR_T          EQU 34H
+CHAR_U          EQU 35H
+CHAR_V          EQU 36H
+CHAR_W          EQU 37H
+CHAR_X          EQU 38H
+CHAR_Y          EQU 39H
+CHAR_Z          EQU 3AH
+			;3BH-3FH are unused
+BLANK_TILE      EQU 40H ;010XXXXX: PICTURES
+RADAR_TGT       EQU 41H
+RADAR_HIT       EQU 42H
+RADAR_MISSED    EQU 43H
+OPEN_SEA        EQU 44H ;0 (Java MapMaker Tile ID)
+LONE_SHIP_TILE  EQU 45H ;1
+SHIP_EASTWARD   EQU 46H ;2
+SHIP_NORTHWARD  EQU 47H ;3
+SHIP_WESTWARD   EQU 48H ;4
+SHIP_SOUTHWARD  EQU 49H ;5
+SHIP_VERTICAL   EQU 4AH ;6
+SHIP_HORIZONTAL EQU 4BH ;7
+SHIP_JUNCTION   EQU 4CH ;8
+CORNERS_TILE_I  EQU 4DH ; 
+HIT_SEA         EQU 4EH ; = OPEN_SEA + 10
+HIT_SJIP_L      EQU 4FH 
+HIT_SHIP_E      EQU 50H 
+HIT_SHIP_N      EQU 51H 
+HIT_SHIP_W      EQU 52H 
+HIT_SHIP_S      EQU 53H 
+HIT_SHIP_V      EQU 54H 
+HIT_SHIP_H      EQU 55H 
+HIT_SHIP_J      EQU 56H ; = SHIP_JUNCTION +10
+CORNERS_TILE_II EQU 57H 
+CHECKERED_TILE  EQU 58H ;PIXELS: 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H
+			; Other ID's until 7FH are not implemented and use no ROM.
+;  END OF TABLE  ;
+
+;=========================================================
+
+; ;;TILE PIXELS LUT;; ;
+
+DIGITS_SYMBOLS:
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 0 ***
+DB  00H,  10H,    10H,  10H,    14H,  18H,    10H,  00H ; 1
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 2
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 3
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 4
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 5
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 6
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 7
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 8
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; 9
+
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ;( )
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; ?
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; !
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; #
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; _
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; "
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; '
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; *
+
+LETTERS:
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; A
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; B
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; C
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; D
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; E
+DB  00H,  00H,    00H,  00H,    00H,  00H,    00H,  00H ; F
+
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; G
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; H
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; I
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; J
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; K
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; L
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; M
+
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; N
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; O
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; P
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; Q
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; R
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; S
+
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; T
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; U
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; V
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; W
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; X
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; Y
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; Z
+
+PICTURES:
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; BLANK
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; TGT
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; HIT
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; MISSED
+
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; SEA
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; E
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; N
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; W
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; S
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; V
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; H
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; J
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; C1
+
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; HIT_SEA
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; E
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; N
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; W
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; S
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; V
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; H
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; J
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; C2
+
+DB 0AAH,  55H,   0AAH,  55H,   0AAH,  55H,   0AAH,  55H ; CH
